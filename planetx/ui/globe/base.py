@@ -167,12 +167,11 @@ FLOW_REACH = 2.0
 # 29 сентября 2026 года, его утверждает автор. 3D-здания выключены,
 # решение автора от 29 сентября 2026 года.
 # Солнце выключено, умолчание плана работ после 0.16.0.
-EXTRA_DEFAULTS = {"grid": False, "stars": True,
+EXTRA_DEFAULTS = {"grid": False,
                   "temperature": False, "buildings": False, "sun": False,
                   "slope": False, "aspect": False, "contours": False,
                   "cutaway": False,
                   "satellites": False,
-                  "air": True,
                   **ROWS.defaults(),
                   }
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.

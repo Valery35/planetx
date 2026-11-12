@@ -81,6 +81,16 @@ class TestRegistry(unittest.TestCase):
         self.assertEqual(reg.previews(),
                          {"paleo": "https://t/{z}/{x}/{y}.jpg"})
 
+    def test_row_before_and_any_body(self):
+        # Звёзды - первой строкой группы, перед солнцем; есть у всех тел.
+        reg = rows.Registry().add(
+            rows.Row("air", "sky", names, after="stars", earth=False),
+            rows.Row("stars", "sky", names, before="sun", earth=False))
+        self.assertEqual(reg.place((("sun", "sky"), ("sats", "sky"))),
+                         (("stars", "sky"), ("air", "sky"), ("sun", "sky"),
+                          ("sats", "sky")))
+        self.assertEqual(reg.any_body(), ("air", "stars"))
+
     def test_repeated_key_refused(self):
         reg = self.make()
         with self.assertRaises(rows.RowError):

@@ -28,9 +28,6 @@ ANY_PLANET = ANY_BODY + RELIEF_BODY + ("grid", "contours")
 # Другие слова слоёв и карт: ключ - слова.
 WORDS = {
     **ROWS.words(),
-    "stars": ("звёзды", "небо", "млечный путь", "stars", "milky way"),
-    "air": ("атмосфера", "воздух", "дымка", "гало", "atmosphere", "haze",
-            "air"),
     "sun": ("ночь", "день", "освещение", "тень", "огни городов", "sun",
             "night", "city lights"),
     "satellites": ("мкс", "спутники", "орбиты", "starlink", "iss",

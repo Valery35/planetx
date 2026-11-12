@@ -89,22 +89,19 @@ VECTOR_COLORS = (((250, 220, 60), (240, 240, 240)),
 MAP_COLORS = {"grid": ((250, 220, 60), (230, 230, 230)),
               "buildings": ((200, 190, 175), (150, 140, 130)),
               "contours": ((150, 100, 60), (250, 220, 60)),
-              "air": ((10, 15, 40), (90, 150, 230), (200, 225, 250)),
               **ROWS.colors()}
 # Вторая строка слоя в каталоге - источник.
-SOURCES = {"stars": "Yale BSC, NASA SVS",
-           "sun": "NASA Black Marble", "satellites": "CelesTrak",
+SOURCES = {"sun": "NASA Black Marble", "satellites": "CelesTrak",
            "cutaway": "PREM, CRUST1.0, Slab2",
            "slope": "Terrarium", "aspect": "Terrarium",
            "grid": "", "buildings": "OpenFreeMap",
            "contours": "Terrarium",
-           "air": "",
            **ROWS.sources()}
 # Слои витрины: ключ строки окна глобуса и группа.
 # Недра с 27 октября 2026 года - четыре подгруппы вместо 21 строки
 # подряд, решение автора.
 LAYERS = ROWS.place((
-          ("stars", "sky"), ("air", "sky"), ("sun", "sky"),
+          ("sun", "sky"),
           ("satellites", "sky"),
           ("cutaway", "geology"),
           ("slope", "terrain"),
@@ -125,7 +122,7 @@ TOOL_COLORS = ((70, 120, 190), (235, 235, 235))  # превью строки-о�
 # ЛЭП и кабели OSM и горизонтали - строки группы «Карта» раздела «Слои»,
 # решение автора от 11 октября 2026 года. Названия берутся отсюда.
 # Слои, которые есть и вне Земли: звёзды везде, уклон - где есть высоты.
-ANY_BODY = ("stars", "air")
+ANY_BODY = ROWS.any_body()
 RELIEF_BODY = ("slope", "aspect")
 # Заливка и обвод контуров горных разработок, выбор помощника.
 MINING_FILL = (235, 125, 35, 90)
@@ -257,17 +254,6 @@ def tool_names():
 def layer_names():
     """Слой витрины: ключ - (название, подсказка)."""
     return {
-        "stars": (tr("Звёзды"), tr(
-            "Звёзды каталога ярких звёзд Йельского университета "
-            "и Млечный путь по карте неба NASA. Картинка неба "
-            "скачивается при первом показе. Звёзды видны "
-            "из космоса и гаснут, когда камера опускается "
-            "в атмосферу.")),
-        "air": (tr("Атмосфера"), tr(
-            "Голубое свечение воздуха вокруг планеты, небо над "
-            "горизонтом и дымка над далёкой поверхностью. Без флажка "
-            "фон вида - чёрный космос, поверхность видна без дымки. "
-            "У тел без воздуха строка ничего не меняет.")),
         "sun": (tr("Солнце"), tr(
             "Свет рельефа, зданий и воздуха по положению солнца. "
             "Ночная сторона Земли тёмная. Время солнца - конец "
@@ -937,8 +923,19 @@ class NasaMaps(QWidget):
 
     def _layer_thumb(self, key, data=None):
         """Превью слоя. data - байты его тайла, если он есть."""
-        if key == "stars":
-            return stars_image()
+        row = ROWS.get(key)
+        paint = getattr(row.tool, "thumb", None) if row else None
+        if key in PREVIEWS:
+            # Превью строки реестра - тайл: свой рисунок исполнителя
+            # (облака поверх подложки) или сам тайл (карта возраста).
+            tile = QImage.fromData(data) if data else QImage()
+            tile = None if tile.isNull() else tile
+            if paint is not None:
+                return paint(key, tile, self.base)
+            return _over(tile, None)
+        image = paint(key, None, self.base) if paint is not None else None
+        if image is not None:
+            return image  # свой рисунок без тайла - звёзды
         if key == "satellites":
             return satellites_image()
         if key == "cutaway":
@@ -948,15 +945,6 @@ class NasaMaps(QWidget):
         if key == "sun":
             lights = QImage.fromData(data) if data else QImage()
             return sun_image(self.base, None if lights.isNull() else lights)
-        if key in PREVIEWS:
-            # Превью строки реестра - тайл: свой рисунок исполнителя
-            # (облака поверх подложки) или сам тайл (карта возраста).
-            tile = QImage.fromData(data) if data else QImage()
-            tile = None if tile.isNull() else tile
-            paint = getattr(ROWS.get(key).tool, "thumb", None)
-            if paint is not None:
-                return paint(tile, self.base)
-            return _over(tile, None)
         if key in MAP_COLORS:
             return ramp_image(MAP_COLORS[key], self.base)
         return ramp_image(layer_ramp(key), self.base)

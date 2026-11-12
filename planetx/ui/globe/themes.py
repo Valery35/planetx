@@ -12,7 +12,7 @@ from qgis.core import QgsSettings
 from qgis.PyQt.QtCore import QTimer
 
 from ... import journal
-from ...core import (basemap, ellipsoid, events, stars, sun, graticule,
+from ...core import (basemap, ellipsoid, events, sun, graticule,
                      themes, wayback, sources as datasources)
 from ...core.geocode import link_zoom
 from ...core.sync import ground_size
@@ -858,19 +858,6 @@ class ThemesMixin:
             return graticule.angle_text(abs(value), step)
         return tr("{angle} в. д.", angle=angle) if value > 0 \
             else tr("{angle} з. д.", angle=angle)
-
-    def _load_sky(self):
-        """Картинка неба с Млечным путём, один раз за окно. Запрос идёт
-        тем же загрузчиком, что и тайлы, картинка раскодируется в его
-        потоке. Второй раз она берётся из кэша QGIS."""
-        if self.sky_loader is not None:
-            return
-        source = basemap.Source("NASA SVS", stars.SKY_URL, 0,
-                                builtin=True)
-        self.sky_loader = TileLoader(source, parent=self)
-        self.sky_loader.loaded.connect(
-            lambda key, rgba, extra: self.view.set_sky_image(rgba))
-        self.sky_loader.want((0, 0, 0), 1.0)
 
     def _surface_source(self):
         """Тайлы высот тела для уклона: (источник, пол высот) или None,

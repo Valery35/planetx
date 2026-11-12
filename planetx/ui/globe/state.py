@@ -305,15 +305,6 @@ class StateMixin:
         elif key == "grid":
             self._grid_key = None
             self._update_grid()
-        elif key == "stars":
-            self.view.set_stars(on)
-            if on:
-                self._load_sky()
-        elif key == "air":
-            # Небо, гало и дымка над поверхностью, просьба автора от
-            # 14 октября 2026 года. Без воздуха фон - чёрный космос.
-            self.view.atmosphere = on
-            self.view.update()
         elif key == "temperature":
             if on and (self.theme_key or self.extras.get("fires")):
                 self.set_theme("temperature")

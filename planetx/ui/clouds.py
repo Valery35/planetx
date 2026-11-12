@@ -34,7 +34,7 @@ class CloudsTool(QObject):
         return [(clouds.LAYER, clouds.image_date(time.time()), path)]
 
     @staticmethod
-    def thumb(tile, base):
+    def thumb(key, tile, base):
         """Превью каталога, как на глобусе: прозрачность по белизне
         снимка поверх подложки."""
         from ..core import themes

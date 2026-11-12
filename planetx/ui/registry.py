@@ -10,10 +10,11 @@
 from ..core.rows import Registry
 from . import (aef, cables, cadastre, clouds, currents, deposits, faults,
                fieldmap, fires, geoid, geomap, infra, magnetic, miningareas,
-               paleo, plants, platemotion, plates, quakes, tilemaps,
+               paleo, plants, platemotion, plates, quakes, sky, tilemaps,
                tileoverlays, transport, valuemaps, volcanoes, wiki)
 
 ROWS = Registry().add(
+    *sky.ROWS,
     *paleo.ROWS,
     *geoid.ROWS,
     *currents.ROWS,

@@ -40,7 +40,7 @@ class Row:
                  colors=(), words=(), fades=(), view_map=None,
                  default=False, earth=True, after=None, qgis_layer=False,
                  points=None, catalog=True, remember=True, preview=None,
-                 flow=None):
+                 flow=None, before=None):
         if not key or not group:
             raise RowError("row needs key and group")
         if not callable(names):
@@ -57,6 +57,7 @@ class Row:
         self.default = bool(default)
         self.earth = bool(earth)
         self.after = after  # ключ строки, за которой стоит строка каталога
+        self.before = before  # или перед которой она стоит
         # Строка рисуется слоем QGIS в картинке наложения: непрозрачность
         # меняет слой, «В проект QGIS…» - исполнитель.
         self.qgis_layer = bool(qgis_layer)
@@ -106,6 +107,10 @@ class Registry:
     def fades(self):
         return {row.key: row.fades for row in self.rows if row.fades}
 
+    def any_body(self):
+        """Ключи строк, которые есть у всех тел, не только у Земли."""
+        return tuple(row.key for row in self.rows if not row.earth)
+
     def forgotten(self):
         """Ключи строк, выключенных при открытии окна."""
         return tuple(row.key for row in self.rows if not row.remember)
@@ -142,13 +147,15 @@ class Registry:
         while pending:
             keys = [key for key, _ in out]
             ready = [row for row in pending
-                     if row.after is None or row.after in keys]
+                     if (row.after is None or row.after in keys)
+                     and (row.before is None or row.before in keys)]
             if not ready:
-                raise RowError("rows placed after unknown keys: {}".format(
+                raise RowError("rows placed by unknown keys: {}".format(
                     ", ".join(row.key for row in pending)))
             for row in ready:
                 keys = [key for key, _ in out]
-                at = len(out) if row.after is None \
+                at = keys.index(row.before) if row.before is not None \
+                    else len(out) if row.after is None \
                     else keys.index(row.after) + 1
                 out.insert(at, (row.key, row.group))
                 pending.remove(row)

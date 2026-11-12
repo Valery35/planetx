@@ -410,7 +410,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.rail_layer = None
         self.place_loader = None
         self.gibs_loaders = {}  # слой GIBS вида -> загрузчик, см. _set_gibs
-        self.sky_loader = None  # картинка неба, см. _load_sky
         self.buildings_loader = None  # тайлы зданий, см. _set_buildings
         self._ofm_source = None  # тайлы OpenFreeMap после TileJSON
         # Настройки вида делятся на выбранные и действующие. Выбранные
@@ -1053,7 +1052,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
                 self.place_loader.abort()
             # У тела без высот загрузчика высот нет.
             for loader in list(self.gibs_loaders.values()) + [
-                    self.terrain_loader, self.sky_loader,
+                    self.terrain_loader,
                     self.buildings_loader]:
                 if loader is not None:
                     loader.abort()
