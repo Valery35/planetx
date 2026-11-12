@@ -8598,12 +8598,19 @@ def fires_check():
     out["frame_ms"] = round((time.perf_counter() - started) / 5 * 1000, 1)
     image.save(os.path.join(TEMP, "planetx_fires.png"))
     window.grab().save(os.path.join(TEMP, "planetx_fires_window.png"))
-    # Опрос: щелчок по самому мощному видимому очагу.
+    # Опрос: щелчок по самому мощному очагу видимой стороны. Очаги
+    # обратной стороны Земли тоже проецируются внутрь диска, опрос их
+    # не берёт - прежний выбор по одному кадру давал пустой опрос.
+    from planetx.core import quakes as quakes_core
     layer = view.fires
     pixels, front = view.camera.project(layer.focus)
     w, h = view.camera.width, view.camera.height
+    eye = np.asarray(view.camera.eye, dtype=np.float64)
     inside = front & (pixels[:, 0] > 0) & (pixels[:, 0] < w) \
         & (pixels[:, 1] > 0) & (pixels[:, 1] < h)
+    if os.environ.get("PLANETX_FIRES_OLD_PICK") != "1":
+        inside &= quakes_core.facing(eye, layer.focus, layer.lats,
+                                     layer.lons)
     if np.any(inside):
         n = int(np.nonzero(inside)[0][np.argmax(data.frp[inside])])
         found = window.row_tool("fires").pick(float(pixels[n, 0]),
@@ -8611,13 +8618,9 @@ def fires_check():
         out["identify"] = [(name, dict(values))
                            for name, values, _ in found[0][1][:1]] \
             if found else []
-        # Подробности опроса: промежуток слоя и время выбранного очага.
-        from planetx.core import quakes as quakes_core
-        win = quakes_core.in_window(layer.times, layer.window)
-        out["pick_debug"] = {
-            "window": layer.window, "time": float(layer.times[n]),
-            "in_window": int(win.sum()), "points": len(layer.times),
-            "aligned": len(layer.times) == len(data.frp)}
+        if not found:
+            result["errors"].append("fires_check: опрос по очагу в кадре "
+                                    "пуст")
     # Пожары - карта витрины: тема снимает пожары, пожары снимают тему.
     window.set_theme("smoke")
     QgsApplication.processEvents()
