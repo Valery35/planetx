@@ -18,7 +18,7 @@ from qgis.utils import iface
 
 from ... import journal
 from ...core import wms
-from ...core import (basemap, clouds, geology, temperature,
+from ...core import (basemap, geology, temperature,
                      quakes, themes, tilemaps)
 from ...core.sync import ground_size, view_box, inside as in_box
 from ...i18n import is_russian, tr
@@ -314,8 +314,6 @@ class StateMixin:
             # 14 октября 2026 года. Без воздуха фон - чёрный космос.
             self.view.atmosphere = on
             self.view.update()
-        elif key == "clouds":
-            self._set_gibs("clouds", on)
         elif key == "temperature":
             if on and (self.theme_key or self.extras.get("fires")):
                 self.set_theme("temperature")
@@ -361,6 +359,7 @@ class StateMixin:
                          key in POINT_LAYERS or key in QGIS_LAYERS
                          or key in PICTURE_LAYERS or key == "geology"
                          or hasattr(self.row_tool(key), "export_picture")
+                         or hasattr(self.row_tool(key), "export_jobs")
                          or key in tilemaps.MAPS, on))
         theme = getattr(self, "theme_key", "") or parked.get("map", "")
         if theme and earth and theme in maps:
@@ -545,8 +544,8 @@ class StateMixin:
             if theme is None:
                 return None
             jobs = [(theme.layer, self.theme_day, path)]
-        elif key == "clouds":
-            jobs = [(clouds.LAYER, clouds.image_date(time.time()), path)]
+        elif hasattr(tool, "export_jobs"):
+            jobs = tool.export_jobs(path)
         else:
             stem = os.path.splitext(path)[0]
             jobs = [(temperature.SEA, None, stem + "_sea.tif"),

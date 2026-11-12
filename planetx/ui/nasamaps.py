@@ -92,7 +92,7 @@ MAP_COLORS = {"grid": ((250, 220, 60), (230, 230, 230)),
               "air": ((10, 15, 40), (90, 150, 230), (200, 225, 250)),
               **ROWS.colors()}
 # Вторая строка слоя в каталоге - источник.
-SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
+SOURCES = {"stars": "Yale BSC, NASA SVS",
            "sun": "NASA Black Marble", "satellites": "CelesTrak",
            "cutaway": "PREM, CRUST1.0, Slab2",
            "slope": "Terrarium", "aspect": "Terrarium",
@@ -104,7 +104,7 @@ SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
 # Недра с 27 октября 2026 года - четыре подгруппы вместо 21 строки
 # подряд, решение автора.
 LAYERS = ROWS.place((
-          ("stars", "sky"), ("air", "sky"), ("clouds", "sky"), ("sun", "sky"),
+          ("stars", "sky"), ("air", "sky"), ("sun", "sky"),
           ("satellites", "sky"),
           ("cutaway", "geology"),
           ("slope", "terrain"),
@@ -268,11 +268,6 @@ def layer_names():
             "горизонтом и дымка над далёкой поверхностью. Без флажка "
             "фон вида - чёрный космос, поверхность видна без дымки. "
             "У тел без воздуха строка ничего не меняет.")),
-        "clouds": (tr("Облака"), tr(
-            "Облака по снимкам VIIRS из NASA GIBS за последние "
-            "полные сутки. Они лежат полупрозрачной пеленой "
-            "поверх снимка. Снег и лёд тоже белые и остаются "
-            "видны.")),
         "sun": (tr("Солнце"), tr(
             "Свет рельефа, зданий и воздуха по положению солнца. "
             "Ночная сторона Земли тёмная. Время солнца - конец "
@@ -624,10 +619,10 @@ def layer_ramp(key):
 def layer_url(key):
     """Адрес тайла превью слоя или None, если картинка рисуется сама."""
     z, x, y = themes.THUMB_TILE
-    if key == "clouds":
-        template = clouds.url_template(time.time())
-    elif key in PREVIEWS:
+    if key in PREVIEWS:
         template = PREVIEWS[key]
+        if callable(template):  # адрес на сегодня, облака
+            template = template()
     elif key == "sun":
         template = sun.LIGHTS_URL
     else:
@@ -953,17 +948,15 @@ class NasaMaps(QWidget):
         if key == "sun":
             lights = QImage.fromData(data) if data else QImage()
             return sun_image(self.base, None if lights.isNull() else lights)
-        if key == "clouds":
-            # Облака, как на глобусе: прозрачность по белизне снимка.
-            tile = QImage.fromData(data) if data else QImage()
-            if not tile.isNull():
-                tile = _rgba_image(clouds.cloud_rgba(
-                    _rgba_array(tile), themes.THUMB_TILE), premultiplied=True)
-            return _over(self.base, None if tile.isNull() else tile)
         if key in PREVIEWS:
-            # Превью строки реестра - сам тайл (карта возраста).
+            # Превью строки реестра - тайл: свой рисунок исполнителя
+            # (облака поверх подложки) или сам тайл (карта возраста).
             tile = QImage.fromData(data) if data else QImage()
-            return _over(None if tile.isNull() else tile, None)
+            tile = None if tile.isNull() else tile
+            paint = getattr(ROWS.get(key).tool, "thumb", None)
+            if paint is not None:
+                return paint(tile, self.base)
+            return _over(tile, None)
         if key in MAP_COLORS:
             return ramp_image(MAP_COLORS[key], self.base)
         return ramp_image(layer_ramp(key), self.base)

@@ -24692,6 +24692,14 @@ def clouds_wait():
     result["clouds"] = _gibs_report(window, "clouds")
     result["clouds"]["attribution"] = \
         "NASA GIBS" in window.attribution.text()
+    # «В проект QGIS…» - картинка WMS GIBS, ответ приходит позже.
+    jobs = len(getattr(window, "_picture_jobs", []))
+    out = window.active_export(
+        "clouds", os.path.join(TEMP, "planetx_clouds_export.tif"))
+    result["clouds"]["export_waits"] = out is None \
+        and len(window._picture_jobs) == jobs + 1
+    result["clouds"]["export_row"] = [
+        row[3] for row in window._active_rows() if row[0] == "clouds"]
     window.set_extra("clouds", False)
     view.update()
 

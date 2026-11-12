@@ -16,7 +16,7 @@ from qgis.PyQt.QtCore import QEvent
 from qgis.PyQt.QtWidgets import QInputDialog, QMessageBox
 
 from ... import journal
-from ...core import (basemap, clouds, fields,
+from ...core import (basemap, fields,
                      sun, tomography,
                      temperature, when, oldmaps,
                      rumsey as rumsey_core,
@@ -572,8 +572,6 @@ class LayersMixin:
                          if self.planet.terrain
                          and self.terrain_loader is not None else "")
             kept = 2
-        if "clouds" in self.gibs_loaders:
-            parts.append(link_html(*clouds.ATTRIBUTION))
         if "theme" in self.gibs_loaders:
             parts.append(link_html(*(
                 field_attribution(self.theme_key)

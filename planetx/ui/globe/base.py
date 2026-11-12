@@ -54,14 +54,14 @@ TERRAIN_MIRRORS = Mirrors(slabs.TERRAIN_REPOS)
 POINT_LAYERS = dict(ROWS.points())
 # Струйки: ключ строки - поле вида.
 FLOW_LAYERS = dict(ROWS.flows())
-GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
+GIBS_FADES = {"slope": ("slope",),
               "aspect": ("slope",), "contours": ("contours",),
               "temperature": ("sea", "land"), "map": ("theme", "compare"),
               **ROWS.fades()}
 QGIS_LAYERS = ROWS.qgis_keys()
 # Раскраски: в проект - сеткой значений или картинкой WMS GIBS. Строки
 # реестра дают свою выгрузку крючком export_picture.
-PICTURE_LAYERS = ("map", "clouds", "temperature")
+PICTURE_LAYERS = ("map", "temperature")
 OPACITY_KEY = "PlanetX/opacity/"
 # Строки слоёв остановки тура и вида метки проявляются и гаснут за
 # столько секунд, шаг таймера - мс. Выбор помощника, утверждает автор.
@@ -167,7 +167,7 @@ FLOW_REACH = 2.0
 # 29 сентября 2026 года, его утверждает автор. 3D-здания выключены,
 # решение автора от 29 сентября 2026 года.
 # Солнце выключено, умолчание плана работ после 0.16.0.
-EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
+EXTRA_DEFAULTS = {"grid": False, "stars": True,
                   "temperature": False, "buildings": False, "sun": False,
                   "slope": False, "aspect": False, "contours": False,
                   "cutaway": False,
@@ -178,7 +178,7 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
 SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
-EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun",
+EARTH_EXTRAS = ("temperature", "buildings", "sun",
                 "cutaway", "satellites") \
     + ROWS.earth_keys()
 # Карты на общем слое вида «emag», на глобусе одна из них: карты
