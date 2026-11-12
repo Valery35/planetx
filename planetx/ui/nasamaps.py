@@ -91,7 +91,7 @@ MAP_COLORS = {"grid": ((250, 220, 60), (230, 230, 230)),
               "contours": ((150, 100, 60), (250, 220, 60)),
               **ROWS.colors()}
 # Вторая строка слоя в каталоге - источник.
-SOURCES = {"sun": "NASA Black Marble", "satellites": "CelesTrak",
+SOURCES = {"sun": "NASA Black Marble",
            "cutaway": "PREM, CRUST1.0, Slab2",
            "slope": "Terrarium", "aspect": "Terrarium",
            "grid": "", "buildings": "OpenFreeMap",
@@ -102,7 +102,6 @@ SOURCES = {"sun": "NASA Black Marble", "satellites": "CelesTrak",
 # подряд, решение автора.
 LAYERS = ROWS.place((
           ("sun", "sky"),
-          ("satellites", "sky"),
           ("cutaway", "geology"),
           ("slope", "terrain"),
           ("aspect", "terrain")))
@@ -260,12 +259,6 @@ def layer_names():
             "промежутка открытой шкалы времени, без неё - часы "
             "компьютера. Без флажка свет падает с северо-запада, "
             "как на карте рельефа.")),
-        "satellites": (tr("Спутники"), tr(
-            "Искусственные спутники по орбитальным элементам CelesTrak, "
-            "положение по модели SGP4. Время - правый бегунок шкалы "
-            "времени, без шкалы - часы компьютера. Группы выбирает "
-            "вкладка «Спутники» витрины. Элементы группы обновляются "
-            "не чаще раза в 2 часа.")),
         "cutaway": (tr("Разрез Земли"), tr(
             "Вынимает из Земли сектор под точкой взгляда - "
             "четверть полушария шириной 90° по долготе. На его "
@@ -936,8 +929,6 @@ class NasaMaps(QWidget):
         image = paint(key, None, self.base) if paint is not None else None
         if image is not None:
             return image  # свой рисунок без тайла - звёзды
-        if key == "satellites":
-            return satellites_image()
         if key == "cutaway":
             return cutaway_image()
         if key == "plates":

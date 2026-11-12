@@ -633,9 +633,6 @@ class PlacesMixin:
             for point, name in sky]
         if getattr(self, "tracks", None) is not None and self.planet.earth:
             shapes += self.tracks.shapes()
-        if getattr(self, "satellite_manager", None) is not None \
-                and self.planet.earth:
-            shapes += self.satellite_manager.shapes()
         if self.planet.earth:
             for manager in getattr(self, "live_managers", ()):
                 shapes += manager.shapes()

@@ -90,7 +90,6 @@ from .polar import PolarCaps
 from .skysurvey import SkySurveys
 from .routing import RouteManager
 from .weather import WeatherManager
-from .satellites import SatelliteManager
 from .track import TrackManager
 from .flightsim import FlightSim
 from .swipe import SwipeBar
@@ -866,9 +865,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         for key in tuple(POINT_LAYERS) + tuple(GIBS_FADES) \
                 + tuple(FLOW_LAYERS):
             self._apply_layer_opacity(key)
-        # Спутники CelesTrak - строка с группами (ui/satellites.py).
-        self.satellite_manager = SatelliteManager(self)
-        self.satellite_manager.changed.connect(self._show_attribution)
         # Живые объекты - поезда, суда, самолёты (ui/transport.py):
         # запись облёта ведёт их по своим часам.
         self.live_managers = tuple(
@@ -972,7 +968,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.water_tiles.stop()
             self._layer_time_timer.stop()
             self._link_timer.stop()
-            self.satellite_manager.close()
             self.flight.close()
             self.title_bars.close()
             self.route_manager.close()

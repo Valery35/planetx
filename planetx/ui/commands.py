@@ -30,8 +30,6 @@ WORDS = {
     **ROWS.words(),
     "sun": ("ночь", "день", "освещение", "тень", "огни городов", "sun",
             "night", "city lights"),
-    "satellites": ("мкс", "спутники", "орбиты", "starlink", "iss",
-                   "satellites"),
     "cutaway": ("разрез земли", "недра", "ядро", "мантия", "кора",
                 "cutaway", "core", "mantle"),
     "slope": ("крутизна", "уклон", "slope"),

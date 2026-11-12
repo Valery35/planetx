@@ -21,8 +21,7 @@ from ...core import (basemap, fields,
                      temperature, when, oldmaps,
                      rumsey as rumsey_core,
                      crust,
-                     slabs, themes, tilemaps,
-                     satellites as satellites_core)
+                     slabs, themes, tilemaps)
 from ...core import sources as datasources
 from ...core import hips, oam, polar
 from ...core.contours import is_imagery as contour_is_imagery
@@ -415,8 +414,6 @@ class LayersMixin:
         if range_key(self._layer_range()) != self._applied_time \
                 or self._maps_changed():
             self._layer_time_timer.start()
-        if hasattr(self, "satellite_manager"):
-            self.satellite_manager.time_changed()
         for tool in getattr(self, "row_tools", {}).values():
             if hasattr(tool, "time_changed"):
                 tool.time_changed()
@@ -583,9 +580,6 @@ class LayersMixin:
             parts.append(link_html(*sun.LIGHTS_ATTRIBUTION))
         if "sea" in self.gibs_loaders:
             parts.append(link_html(*temperature.ATTRIBUTION))
-        manager = getattr(self, "satellite_manager", None)
-        if manager is not None and manager.on and manager.count():
-            parts.append(link_html(*satellites_core.ATTRIBUTION))
         if self.planet.earth and self._rumsey_shown():
             parts.append(link_html(*rumsey_core.ATTRIBUTION))
         if self.planet.earth and self._oam_shown():

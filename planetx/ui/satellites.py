@@ -29,6 +29,7 @@ from ..core import satellites as core
 from ..core import sgp4
 from ..core.features import Shape
 from ..core.navigation import lifted
+from ..core.rows import Row
 from ..i18n import tr
 from ..net.overlay import fetch_bytes
 
@@ -435,3 +436,72 @@ class SatelliteManager(QObject):
         self.tick.stop()
         self.init_timer.stop()
         self._abort(set(self.replies))
+
+
+class SatelliteRow(QObject):
+    """Исполнитель строки «Спутники» реестра каталога (core/rows.py).
+    Менеджер групп - окну (window.satellite_manager): его берут меню на
+    глобусе, вкладка «Спутники» каталога и опрос щелчком. Поле sats,
+    а не manager: исполнителей с manager окно считает живыми объектами
+    (поезда, суда, самолёты, ui/transport.py)."""
+
+    def __init__(self, window):
+        super().__init__(window)
+        self.window = window
+        self.sats = SatelliteManager(window)
+        self.sats.changed.connect(window._show_attribution)
+        window.satellite_manager = self.sats
+
+    shown_key = None
+
+    def turn(self, key, on):
+        self.sats.set_on(on)
+        self.window._update_timebar()
+        return True
+
+    def needs_clock(self):
+        """Спутники идут по часам глобуса и без данных на шкале."""
+        window = self.window
+        return bool(getattr(window, "extras", {}).get("satellites")) \
+            and window.planet.earth
+
+    def time_changed(self):
+        self.sats.time_changed()
+
+    def shapes(self):
+        return self.sats.shapes() if self.window.planet.earth else []
+
+    def credits(self):
+        sats = self.sats
+        return [core.ATTRIBUTION] if sats.on and sats.count() else []
+
+    @staticmethod
+    def thumb(key, tile, base):
+        from .nasamaps import satellites_image
+        return satellites_image()
+
+    def identify(self, lat, lon, tolerance=0.0):
+        return []
+
+    def credit(self):
+        return None
+
+    def close(self):
+        self.sats.close()
+
+
+def _row_names():
+    return (tr("Спутники"), tr(
+        "Искусственные спутники по орбитальным элементам CelesTrak, "
+        "положение по модели SGP4. Время - правый бегунок шкалы "
+        "времени, без шкалы - часы компьютера. Группы выбирает "
+        "вкладка «Спутники» витрины. Элементы группы обновляются "
+        "не чаще раза в 2 часа."))
+
+
+ROWS = (
+    Row("satellites", "sky", _row_names, SatelliteRow, source="CelesTrak",
+        words=("мкс", "спутники", "орбиты", "starlink", "iss",
+               "satellites"),
+        after="sun"),
+)

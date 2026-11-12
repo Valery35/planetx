@@ -322,9 +322,6 @@ class StateMixin:
             self._set_surface()
         elif key == "cutaway":
             self._set_cutaway(on)
-        elif key == "satellites":
-            self.satellite_manager.set_on(on)
-            self._update_timebar()
 
     # Раздел «На глобусе»: включённые слои, непрозрачность, выгрузка.
 
@@ -619,8 +616,10 @@ class StateMixin:
         earth = planet is None or planet.earth
         # Тени участка идут за шкалой времени (ui/shadows.py).
         shadows = getattr(self, "shadows_horizon", None) is not None
-        return earth and bool(extras.get("sun")
-                              or extras.get("satellites") or shadows)
+        rows = any(tool.needs_clock()
+                   for tool in getattr(self, "row_tools", {}).values()
+                   if hasattr(tool, "needs_clock"))
+        return rows or earth and bool(extras.get("sun") or shadows)
 
     def satellite_span(self):
         """Момент спутников, секунды UTC: правый бегунок открытой шкалы
