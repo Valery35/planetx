@@ -3267,7 +3267,7 @@ def grid_space():
     window.set_extra("grid", True)
     view.update()
     result["grid"] = {
-        "space_lines": len(window.grid_shapes),
+        "space_lines": len(window.row_tool("grid").lines),
         "space_labels": sorted(m.name for m in view.grid_marks)[:6],
         "circles": [m.name for m in view.grid_marks
                     if m.kind == "circle"]}
@@ -3282,7 +3282,7 @@ def grid_near():
     view.navigator.set_pose(Pose(58.0105, 56.2294, 25000.0, 20.0, 45.0))
     view.update()
     QgsApplication.processEvents()
-    result["grid"]["near_lines"] = len(window.grid_shapes)
+    result["grid"]["near_lines"] = len(window.row_tool("grid").lines)
     result["grid"]["near_labels"] = sorted(
         m.name for m in view.grid_marks)[:6]
 
@@ -3292,7 +3292,7 @@ def grid_off():
     window = state["window"]
     window.grab().save(os.path.join(TEMP, "planetx_grid_near.png"))
     window.set_extra("grid", False)
-    result["grid"]["off_lines"] = len(window.grid_shapes)
+    result["grid"]["off_lines"] = len(window.row_tool("grid").lines)
     result["grid"]["off_on_globe"] = len(window.view.features.shapes)
 
 
@@ -3535,7 +3535,7 @@ def body_tools_check():
     view = window.view
     out.update({
         "file": [image.width(), image.height()],
-        "grid_shapes": len(window.grid_shapes),
+        "grid_shapes": len(window.row_tool("grid").lines),
         "length_m": round(values["length"], 1),
         "expect_m": round(2 * math.pi * 3396190.0 / 360.0, 1),
         "ground_m": round(values.get("ground") or 0.0, 1),

@@ -99,8 +99,9 @@ class BodyMixin:
         self._mark_gallery()
         self._fill_basemaps()
         self._update_relief_menu()
-        self._grid_key = None
-        self._update_grid()
+        for tool in self.row_tools.values():
+            if hasattr(tool, "body_changed"):
+                tool.body_changed()  # сетка заново по размеру тела
         self._refresh_shapes()
         lat, lon, distance = planet.home
         navigator = self.view.navigator

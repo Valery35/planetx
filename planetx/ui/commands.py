@@ -22,9 +22,9 @@ from .nasamaps import ANY_BODY, LAYERS, RELIEF_BODY, layer_names, map_names
 from .registry import ROWS
 
 # Строки группы «Карта» раздела «Слои»: ключ - название.
-MAP_ROWS = ("grid", "buildings", "contours")
+MAP_ROWS = ("buildings", "contours")
 # Слои, которые есть вне Земли.
-ANY_PLANET = ANY_BODY + RELIEF_BODY + ("grid", "contours")
+ANY_PLANET = ANY_BODY + RELIEF_BODY + ("contours",)
 # Другие слова слоёв и карт: ключ - слова.
 WORDS = {
     **ROWS.words(),
@@ -34,7 +34,6 @@ WORDS = {
                 "cutaway", "core", "mantle"),
     "slope": ("крутизна", "уклон", "slope"),
     "aspect": ("экспозиция", "стороны света", "aspect"),
-    "grid": ("сетка", "градусы", "экватор", "graticule", "grid"),
     "buildings": ("здания", "дома", "3d", "buildings"),
     "contours": ("изолинии", "горизонтали", "изобаты", "contours"),
     "temperature": ("температура", "жара", "temperature"),
@@ -65,8 +64,7 @@ def build(window):
     extras = getattr(window, "extras", {})
     names = layer_names()
     titles = dict((key, value[0]) for key, value in names.items())
-    titles.update({"grid": tr("Координатная сетка"),
-                   "buildings": tr("3D-здания")})
+    titles.update({"buildings": tr("3D-здания")})
     keys = [key for key, _ in LAYERS] + list(MAP_ROWS)
     for key in keys:
         if key not in titles or (not earth and key not in ANY_PLANET):

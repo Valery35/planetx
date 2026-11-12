@@ -81,20 +81,19 @@ VECTOR = "vector:"
 # Вид строки слоя всего каталога GIBS: строки приходят по запросу.
 GIBS = "gibsall"
 GIBS_SEARCH = 3  # знаков поиска, с которых просится каталог GIBS
-MAP_ROWS = ("grid", "buildings", "contours")
+MAP_ROWS = ("buildings", "contours")
 # Цвета превью строк «Карты» - выбор помощника.
 VECTOR_COLORS = (((250, 220, 60), (240, 240, 240)),
                  ((255, 200, 70), (250, 240, 180), (90, 90, 90)),
                  ((60, 120, 220), (90, 170, 90), (150, 110, 70)))
-MAP_COLORS = {"grid": ((250, 220, 60), (230, 230, 230)),
-              "buildings": ((200, 190, 175), (150, 140, 130)),
+MAP_COLORS = {"buildings": ((200, 190, 175), (150, 140, 130)),
               "contours": ((150, 100, 60), (250, 220, 60)),
               **ROWS.colors()}
 # Вторая строка слоя в каталоге - источник.
 SOURCES = {"sun": "NASA Black Marble",
            "cutaway": "PREM, CRUST1.0, Slab2",
            "slope": "Terrarium", "aspect": "Terrarium",
-           "grid": "", "buildings": "OpenFreeMap",
+           "buildings": "OpenFreeMap",
            "contours": "Terrarium",
            **ROWS.sources()}
 # Слои витрины: ключ строки окна глобуса и группа.
@@ -274,10 +273,6 @@ def layer_names():
         "aspect": (tr("Экспозиция"), tr(
             "Куда обращён склон - цвет стороны света, ровное "
             "место серое. Включается вместо уклона.")),
-        "grid": (tr("Координатная сетка"), tr(
-            "Параллели и меридианы с подписями градусов, экватор, "
-            "тропики и полярные круги. Шаг сетки меняется с высотой "
-            "камеры.")),
         "buildings": (tr("3D-здания"), tr(
             "Объёмные здания из OpenStreetMap по векторным тайлам "
             "OpenFreeMap. Они видны, когда камера ближе 6 км к земле. "
@@ -1092,7 +1087,7 @@ class NasaMaps(QWidget):
             if kind != TOOL:
                 item.setCheckState(checked if self.is_on(key)
                                    else unchecked)
-            usable = planet.earth or key in ANY_BODY + ("grid",) \
+            usable = planet.earth or key in ANY_BODY \
                 or (key in RELIEF_BODY + ("contours",) and relief)
             # Спутники, подоснова и окна у точки - только у Земли.
             usable = usable and (kind not in (SAT, BASE, TOOL)

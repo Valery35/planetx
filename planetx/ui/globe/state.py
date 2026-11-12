@@ -302,9 +302,6 @@ class StateMixin:
         row = ROWS.get(key)
         if row is not None:
             self._turn_row(row, on)
-        elif key == "grid":
-            self._grid_key = None
-            self._update_grid()
         elif key == "temperature":
             if on and (self.theme_key or self.extras.get("fires")):
                 self.set_theme("temperature")
@@ -340,7 +337,7 @@ class StateMixin:
             if not on and key not in parked:
                 continue
             if not earth and key not in ANY_BODY + RELIEF_BODY + (
-                    "contours", "grid"):
+                    "contours",):
                 continue
             title = (names.get(key) or maps.get(key) or (key,))[0]
             rows.append((key, title, self._row_opacity(key),

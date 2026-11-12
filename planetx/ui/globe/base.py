@@ -76,7 +76,7 @@ SECTION_TIME_PAUSE = 400
 WAYBACK_PAUSE = 700
 # Порядок строк «На глобусе»: слои витрины, слои «Карты», карты витрины.
 ACTIVE_ORDER = tuple(key for key, _ in GALLERY_LAYERS) + (
-    "grid", "buildings", "contours", "fires", "temperature")
+    "buildings", "contours", "fires", "temperature")
 # Каталог «Добавить данные» в левой панели: панель не уже, пиксели.
 # Горизонтали тел - на столько уровней глубже уровня высот тела, по
 # пересчитанному предку. У Марса пиксель уровня 5 около 2.6 км, уровня
@@ -167,8 +167,7 @@ FLOW_REACH = 2.0
 # 29 сентября 2026 года, его утверждает автор. 3D-здания выключены,
 # решение автора от 29 сентября 2026 года.
 # Солнце выключено, умолчание плана работ после 0.16.0.
-EXTRA_DEFAULTS = {"grid": False,
-                  "temperature": False, "buildings": False, "sun": False,
+EXTRA_DEFAULTS = {"temperature": False, "buildings": False, "sun": False,
                   "slope": False, "aspect": False, "contours": False,
                   "cutaway": False,
                   **ROWS.defaults(),
@@ -211,9 +210,6 @@ MODEL_SIDE = 2048
 # Перелёт к модели без своего вида: расстояние, метры, и наклон.
 MODEL_DISTANCE = 300.0
 MODEL_TILT = 60.0
-GRID_COLOR = (220, 220, 220, 255)
-GRID_WIDTH = 1.0
-CIRCLE_COLOR = (255, 230, 0, 255)  # экватор, тропики, полярные круги
 SCALE_KEY = "PlanetX/relief_scale"  # вертикальный масштаб рельефа
 LANGUAGE_KEY = "PlanetX/label_language"  # язык подписей
 COORDS_KEY = "PlanetX/coords"  # формат координат

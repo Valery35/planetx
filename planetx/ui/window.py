@@ -904,12 +904,9 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             or "aef_change", False)
         self.route_manager.finished.connect(self._route_done)
         self.panel.route_link.connect(self.route_manager.link)
-        self.grid_shapes = []
-        self._grid_key = None
         self.layer_labels = LayerLabels(self)
         self.layer_labels.changed.connect(self._show_layer_labels)
         self.view.changed.connect(self._update_layer_labels)
-        self.view.changed.connect(self._update_grid)
         # Числа поля прогноза: поле на глобусе (Field, Grid) и ключ
         # узлов, см. _update_values.
         self._value_field = None

@@ -12,17 +12,15 @@ from qgis.core import QgsSettings
 from qgis.PyQt.QtCore import QTimer
 
 from ... import journal
-from ...core import (basemap, ellipsoid, events, sun, graticule,
+from ...core import (basemap, ellipsoid, events, sun,
                      themes, wayback, sources as datasources)
 from ...core.geocode import link_zoom
 from ...core.sync import ground_size
-from ...core.features import Shape
 from ...core.contours import (LEVEL as CONTOUR_LEVEL,
                               SOURCE_LEVEL as CONTOUR_SOURCE,
                               is_imagery as contour_is_imagery,
                               view_step as contour_view_step)
 from ...core.terrain import MAX_LEVEL as TERRAIN_MAX
-from ...core.places import Place as MarkPlace
 from ...i18n import tr
 from ...net.loader import TileLoader
 from ...net.overlay import fetch_bytes, fetch_json
@@ -38,8 +36,7 @@ from ..contours import ContourSource, digit_glyphs
 from ..properties import SCALE_RANGE
 from ..nasamaps import NasaMaps, map_names
 from ..overture import OvertureTiles, release_url
-from .base import (BODY_CONTOUR_DEEPER, CIRCLE_COLOR,
-                   GRID_COLOR, GRID_WIDTH, RELIEF_KEY, SCALE_KEY, SUN_PERIOD,
+from .base import (BODY_CONTOUR_DEEPER, RELIEF_KEY, SCALE_KEY, SUN_PERIOD,
                    SURFACE_EXTRAS, THEME_KEY, TILE_SIZE, WAYBACK_PAUSE,
                    buildings_decoder,
                    contours_prepare, gibs_source, prepare_theme, slope_prepare)
@@ -797,67 +794,6 @@ class ThemesMixin:
     def _show_layer_labels(self):
         self.view.layer_marks = self.layer_labels.marks
         self.view.update()
-
-    def _update_grid(self):
-        """Сетка на глобусе. Строится заново, только когда меняется
-        шаг или точка взгляда уходит на шаг, а не каждый кадр."""
-        if not self.extras.get("grid"):
-            if self.grid_shapes or self.view.grid_marks:
-                self.grid_shapes = []
-                self.view.grid_marks = []
-                self._grid_key = None
-                self._refresh_shapes()
-            return
-        pose = self.view.navigator.pose
-        width = 2.0 * pose.distance * math.tan(
-            math.radians(self.view.camera.fov_y) / 2.0)
-        key = graticule.key(pose.lat, pose.lon, width)
-        if key == self._grid_key:
-            return
-        self._grid_key = key
-        step, found = graticule.lines(pose.lat, pose.lon, width)
-        self.grid_shapes = [Shape("line", points, color=GRID_COLOR,
-                                  width=GRID_WIDTH)
-                            for _, _, points in found]
-        self.grid_shapes += [
-            Shape("line", points, color=CIRCLE_COLOR, width=GRID_WIDTH)
-            for _, _, points in graticule.circles(pose.lat, pose.lon,
-                                                  width)]
-        marks = []
-        for n, (lat, lon, kind, value) in enumerate(
-                graticule.labels(pose.lat, pose.lon, width)):
-            marks.append(MarkPlace(-100000 - n, self._grid_text(
-                kind, value, step), "grid", 1, lat,
-                graticule.normal_lon(lon)))
-        names = self._circle_names()
-        for n, (lat, lon, name) in enumerate(
-                graticule.circle_labels(pose.lat, pose.lon, width)):
-            marks.append(MarkPlace(-200000 - n, names[name], "circle", 1,
-                                   lat, graticule.normal_lon(lon)))
-        self.view.grid_marks = marks
-        self._refresh_shapes()
-
-    @staticmethod
-    def _circle_names():
-        return {"equator": tr("Экватор"),
-                "cancer": tr("Тропик Рака"),
-                "capricorn": tr("Тропик Козерога"),
-                "arctic": tr("Северный полярный круг"),
-                "antarctic": tr("Южный полярный круг")}
-
-    def _grid_text(self, kind, value, step):
-        """Подпись линии сетки с полушарием."""
-        angle = graticule.angle_text(value, step)
-        if kind == "lat":
-            if abs(value) < 1e-9:
-                return angle
-            return tr("{angle} с. ш.", angle=angle) if value > 0 \
-                else tr("{angle} ю. ш.", angle=angle)
-        value = graticule.normal_lon(value)
-        if abs(value) < 1e-9 or abs(abs(value) - 180.0) < 1e-9:
-            return graticule.angle_text(abs(value), step)
-        return tr("{angle} в. д.", angle=angle) if value > 0 \
-            else tr("{angle} з. д.", angle=angle)
 
     def _surface_source(self):
         """Тайлы высот тела для уклона: (источник, пол высот) или None,
