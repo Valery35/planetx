@@ -123,9 +123,7 @@ from .globe.tools import ToolsMixin
 from .globe.pictures import PicturesMixin
 from .globe.identify import IdentifyMixin
 from .globe.resources import ResourcesMixin
-from .globe.wiki import WikiMixin
 from .globe.disasters import DisastersMixin
-from .wikipedia import WikiArticles
 
 # Имена, которые берут из модуля окна снаружи.
 __all__ = ("GlobeWindow", "ACCEPTED_KEY", "READY_KEY", "TERRAIN_MIRRORS",
@@ -145,7 +143,7 @@ def _shadow(widget):
 class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
                   LayersMixin, SearchMixin, PlacesMixin, ActionsMixin,
                   ToolsMixin, PicturesMixin, IdentifyMixin, ResourcesMixin,
-                  WikiMixin, DisastersMixin, QWidget):
+                  DisastersMixin, QWidget):
     """Отдельное окно поверх главного окна QGIS."""
 
     closed = pyqtSignal()
@@ -349,15 +347,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.paleo_url = paleo.TILE_URL
         self._paleo_sources = {}
         self.paleo_bar.ready = self._paleo_ready
-        # Википедия рядом (core/wikipedia.py): статьи по тайлам вида,
-        # запрос первого абзаца открытой карточки.
-        self.wiki_articles = WikiArticles(self.view, self._place_wiki,
-                                          self._wiki_failed)
-        self._summary_reply = None
-        self._wiki_timer = QTimer(self)
-        self._wiki_timer.setSingleShot(True)
-        self._wiki_timer.setInterval(OSM_PAUSE)
-        self._wiki_timer.timeout.connect(self._want_wiki)
         self._osm_timer = QTimer(self)
         self._osm_timer.setSingleShot(True)
         self._osm_timer.setInterval(OSM_PAUSE)
@@ -947,7 +936,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.view.changed.connect(self._rows_view_changed)
         self.view.changed.connect(self._update_contour_legend)
         self.view.changed.connect(self._overpass_view_changed)
-        self.view.changed.connect(self._wiki_view_changed)
         self.view.changed.connect(self._wayback_view)
         # Снимки полярных шапок, ui/polar.py.
         self.polar_caps = PolarCaps(self.view, self)
@@ -1004,11 +992,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.route_manager.close()
             self.polar_caps.close()
             self.sky_surveys.close()
-            self._wiki_timer.stop()
-            self.wiki_articles.stop()
-            reply, self._summary_reply = self._summary_reply, None
-            if reply is not None:
-                reply.abort()
             self.weather.close()
             self.flow.close()
             if getattr(self, "gallery", None) is not None:

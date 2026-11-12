@@ -332,8 +332,6 @@ class StateMixin:
             self._update_timebar()
         elif key in SURFACE_EXTRAS or key == "contours":
             self._set_surface()
-        elif key == "wiki":
-            self._set_wiki(on)
         elif key == "currents":
             self._set_currents(on)
         elif key == "cadastre":

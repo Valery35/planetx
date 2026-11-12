@@ -27908,23 +27908,24 @@ def wiki_on():
 @check(500)
 def wiki_wait():
     """Ждёт тайлов статей и подписей статей на экране, не дольше 40 с."""
-    from planetx.ui.globe.wiki import WIKI_ID
+    from planetx.ui.wiki import WIKI_ID
     window = state["window"]
     view = window.view
-    window._want_wiki()
+    tool = window.row_tool("wiki")
+    tool.want()
     view.repaint()
     QgsApplication.processEvents()
     shown = [k for k in view.labels.shown if (k[0] or 0) >= WIKI_ID]
     waited = time.monotonic() - state["wiki_since"]
-    if (len(window.wiki_articles.tiles) < 9 or not shown) and waited < 40.0:
+    if (len(tool.articles.tiles) < 9 or not shown) and waited < 40.0:
         return 1000
     out = result["wiki"]
     out["waited"] = round(waited, 1)
-    out["tiles"] = len(window.wiki_articles.tiles)
-    out["articles"] = len(window.wiki_articles.articles())
+    out["tiles"] = len(tool.articles.tiles)
+    out["articles"] = len(tool.articles.articles())
     out["marks"] = len(view.wiki_marks)
     out["shown"] = len(shown)
-    out["lang"] = window.wiki_articles.lang
+    out["lang"] = tool.articles.lang
     out["credit"] = "Wikipedia" in window.attribution.text()
     return None
 
@@ -27952,7 +27953,7 @@ def wiki_click():
     window.side.close_dialog()
     # Группа окна «Объекты» - до карточки: панель справа сужает вид,
     # и точка статьи уходит с пикселя.
-    out["objects_group"] = len(window._identify_wiki(px, py))
+    out["objects_group"] = len(window.row_tool("wiki").pixel_groups(px, py))
     window._clicked(px, py)
     card = window.side.dialog
     out["card"] = isinstance(card, ArticleCard)
@@ -27987,7 +27988,7 @@ def wiki_card():
         and " ".join(card.extract.split())[:40] in question
     out["question_has_grid"] = any(name in question for name in layers)
     before = len(window.myplaces.places)
-    window.keep_article(card)
+    window.row_tool("wiki").keep(card)
     added = [p for p in window.myplaces.places
              if p.shape.name == a.title]
     out["kept"] = len(window.myplaces.places) - before

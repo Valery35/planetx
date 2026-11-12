@@ -176,7 +176,6 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "currents": False, "cadastre": False,
                   "geoid": False,
                   "air": True,
-                  "wiki": False,
                   **ROWS.defaults(),
                   }
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
@@ -185,8 +184,7 @@ SURFACE_EXTRAS = ("slope", "aspect")
 EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun",
                 "cutaway", "paleo", "satellites",
                 "currents", "cadastre",
-                "geoid",
-                "wiki") \
+                "geoid") \
     + ROWS.earth_keys()
 # Карты на общем слое вида «emag», на глобусе одна из них: карты
 # значений, Macrostrat, карты картинками, изменения местности и поля.

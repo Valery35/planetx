@@ -38,6 +38,9 @@ from ..tilesource import save_connection
 from .base import (EXTRA_DEFAULTS, IDENTIFY_PIXELS, PARCEL_COLOR, PARCEL_FILL,
                    all_sources, distance_text, parcel_labels)
 
+# Строки «Слоёв», которые помощнику о месте ничего не говорят.
+QUIET_LAYERS = ("stars", "air", "wiki")
+
 
 class IdentifyMixin:
     """Часть окна глобуса GlobeWindow."""
@@ -119,9 +122,9 @@ class IdentifyMixin:
             if place is not None:
                 self.open_place_card(place)
                 return
-            found = self._article_under(px, py)
-            if found is not None:
-                self.open_article_card(*found)
+            opener = self._card_under(px, py)
+            if opener is not None:
+                opener()
                 return
             if not self._point_under(px, py):
                 found = self._feature_under(px, py)
@@ -169,6 +172,22 @@ class IdentifyMixin:
         self._place_card = card
         card.finished.connect(lambda *a, c=card: self._card_closed(c))
         self.side.host(card)
+
+    def _card_under(self, px, py):
+        """Карточка строки реестра под пикселем кадра (исполнители
+        с card_under, статья Википедии): функция открытия или None."""
+        for tool in self.row_tools.values():
+            if hasattr(tool, "card_under"):
+                opener = tool.card_under(px, py)
+                if opener is not None:
+                    return opener
+        return None
+
+    def _explain_layers(self):
+        """Названия включённых строк «Слоёв» глобуса для вопроса
+        помощнику. Слои проекта не уходят."""
+        return [row[1] for row in self._active_rows()
+                if row[4] and row[0] not in QUIET_LAYERS]
 
     def _card_place(self, key, action):
         place = self.myplaces.find(key)
@@ -443,7 +462,9 @@ class IdentifyMixin:
         groups += self._identify_parcels()
         groups += self._identify_places(lat, lon, tolerance)
         groups += self._pick_rows(px, py)
-        groups += self._identify_wiki(px, py)
+        groups += [group for tool in self.row_tools.values()
+                   if hasattr(tool, "pixel_groups")
+                   for group in tool.pixel_groups(px, py)]
         groups = self._identify_satellites(px, py) + groups
         under = self.subsurface.identify(
             px, py, IDENTIFY_PIXELS * self.view.devicePixelRatioF())
