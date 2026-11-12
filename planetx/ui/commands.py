@@ -58,7 +58,6 @@ WORDS = {
     "contours": ("изолинии", "горизонтали", "изобаты", "contours"),
     "cadastre": ("кадастр", "росреестр", "нспд", "участки",
                  "земельные участки", "пкк", "cadastre", "parcels"),
-    "fires": ("пожары", "огонь", "fires", "firms"),
     "temperature": ("температура", "жара", "temperature"),
     "weather_aurora": ("сияние", "северное сияние", "аврора",
                        "aurora", "northern lights", "ovation"),

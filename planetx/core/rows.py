@@ -29,7 +29,7 @@ class Row:
     def __init__(self, key, group, names, tool=None, source="",
                  colors=(), words=(), fades=(), view_map=None,
                  default=False, earth=True, after=None, qgis_layer=False,
-                 points=None):
+                 points=None, catalog=True):
         if not key or not group:
             raise RowError("row needs key and group")
         if not callable(names):
@@ -52,6 +52,9 @@ class Row:
         # Строка рисуется точками - поле вида points: ползунок меняет их
         # непрозрачность, «В проект QGIS…» пишет точки рамки вида.
         self.points = points
+        # Строка стоит в каталоге слоёв (place). False - карточку даёт
+        # другая часть каталога, как пожарам - общий выбор тем.
+        self.catalog = bool(catalog)
 
 
 class Registry:
@@ -104,7 +107,7 @@ class Registry:
         с after встаёт за своей строкой, в том числе за строкой реестра,
         прочие - в конец по порядку."""
         out = list(pairs)
-        pending = list(self.rows)
+        pending = [row for row in self.rows if row.catalog]
         while pending:
             keys = [key for key, _ in out]
             ready = [row for row in pending

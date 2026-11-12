@@ -6,7 +6,6 @@
 
 Часть окна глобуса GlobeWindow (ui/window.py)."""
 import html
-import datetime
 import math
 import os
 import time
@@ -333,8 +332,6 @@ class StateMixin:
             self._update_timebar()
         elif key in SURFACE_EXTRAS or key == "contours":
             self._set_surface()
-        elif key == "fires":
-            self._set_fires(on)
         elif key == "wiki":
             self._set_wiki(on)
         elif key == "currents":
@@ -528,35 +525,16 @@ class StateMixin:
             return 0
         keep = in_box(layer.lats, layer.lons, box)
         tool = self.row_tool(key)
-        if key == "fires" or getattr(tool, "point_window", False):
+        if getattr(tool, "point_window", False):
             keep &= quakes.in_window(layer.times, layer.window)
         index = np.nonzero(keep)[0]
-        fields, rows = tool.point_rows(layer, index) \
-            if hasattr(tool, "point_rows") \
-            else self._point_rows(key, layer, index)
+        fields, rows = tool.point_rows(layer, index)
         count = layer_export.write_points(
             path, key, layer.lats[index], layer.lons[index],
             layer.colors[index] * 255.0, layer.sizes[index], fields, rows)
         if count is None or layer_export.add_points(path, key, title) is None:
             return None
         return count
-
-    def _point_rows(self, key, layer, index):
-        """Поля и значения точек index слоя вида key."""
-        def stamp(seconds):
-            if seconds is None or not math.isfinite(seconds):
-                return ""
-            # fromtimestamp на Windows не берёт время до 1970 года.
-            epoch = datetime.datetime(1970, 1, 1,
-                                      tzinfo=datetime.timezone.utc)
-            return (epoch + datetime.timedelta(seconds=seconds)).strftime(
-                "%Y-%m-%d %H:%M")
-        fires = layer.fires
-        fields = [("frp_mw", "real"), ("time", "str"),
-                  ("confidence", "str")]
-        rows = [(float(fires.frp[n]), stamp(float(fires.time[n])),
-                 fires.confidence[n]) for n in index]
-        return fields, rows
 
     def _export_picture(self, key, title, path, box):
         """Раскраска вида в проект. Поля погоды и течения - числа сетки

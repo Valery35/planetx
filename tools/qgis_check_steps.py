@@ -1210,8 +1210,9 @@ def fires_flip():
     window.set_body("earth")
     window.set_theme("fires")
     window.set_theme("")
+    tool = window.row_tool("fires")
     result["fires_flip"] = {"pending": window.view.data_pending,
-                            "reply": window._fire_reply is not None}
+                            "reply": tool.reply is not None}
 
 
 @check(500)
@@ -8561,13 +8562,13 @@ def fires_on():
     started = time.monotonic()
     window.set_extra("fires", True)
     state["fires_started"] = started
-    result["fires"] = {"reply": window._fire_reply is not None}
+    result["fires"] = {"reply": window.row_tool("fires").reply is not None}
 
 
 @check(2000)
 def fires_wait():
     window = state["window"]
-    if window._fire_reply is not None \
+    if window.row_tool("fires").reply is not None \
             and time.monotonic() - state["fires_started"] < 90.0:
         return 500
     result["fires"]["load_s"] = round(time.monotonic()
@@ -8580,7 +8581,7 @@ def fires_check():
     window = state["window"]
     view = window.view
     out = result["fires"]
-    data = window.fire_data
+    data = window.row_tool("fires").data
     out["count"] = len(data) if data is not None else None
     out["message"] = window.message[0]
     out["drawn"] = view.fires.drawn
@@ -8605,11 +8606,18 @@ def fires_check():
         & (pixels[:, 1] > 0) & (pixels[:, 1] < h)
     if np.any(inside):
         n = int(np.nonzero(inside)[0][np.argmax(data.frp[inside])])
-        found = window._identify_fires(float(pixels[n, 0]),
-                                       float(pixels[n, 1]))
+        found = window.row_tool("fires").pick(float(pixels[n, 0]),
+                                              float(pixels[n, 1]))
         out["identify"] = [(name, dict(values))
                            for name, values, _ in found[0][1][:1]] \
             if found else []
+        # Подробности опроса: промежуток слоя и время выбранного очага.
+        from planetx.core import quakes as quakes_core
+        win = quakes_core.in_window(layer.times, layer.window)
+        out["pick_debug"] = {
+            "window": layer.window, "time": float(layer.times[n]),
+            "in_window": int(win.sum()), "points": len(layer.times),
+            "aligned": len(layer.times) == len(data.frp)}
     # Пожары - карта витрины: тема снимает пожары, пожары снимают тему.
     window.set_theme("smoke")
     QgsApplication.processEvents()

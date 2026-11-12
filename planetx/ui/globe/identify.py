@@ -15,7 +15,7 @@ from qgis.utils import iface
 
 from ... import journal
 from ...core import (basemap, cadastre, when, assistant as assistant_core,
-                     pick, quakes)
+                     pick)
 from ...core.ellipsoid import ecef_to_geodetic
 from ...core.features import Shape
 from ...core.navigation import focal, ground_under
@@ -295,7 +295,6 @@ class IdentifyMixin:
         2026 года «клик по точкам ничего не даёт»."""
         return bool(self._pick_rows(px, py)
                     or self._lines_under(px, py)
-                    or self._identify_fires(px, py)
                     or self._identify_satellites(px, py)
                     or self._identify_trains(px, py)
                     or self._identify_live(px, py))
@@ -445,7 +444,6 @@ class IdentifyMixin:
                            [(tr("Точка облака"), values, None)]))
         groups += self._identify_parcels()
         groups += self._identify_places(lat, lon, tolerance)
-        groups += self._identify_fires(px, py)
         groups += self._pick_rows(px, py)
         groups += self._identify_wiki(px, py)
         groups = self._identify_satellites(px, py) \
@@ -938,34 +936,3 @@ class IdentifyMixin:
             if features:
                 out.append((Group(title), features))
         return out
-
-    def _identify_fires(self, px, py):
-        """Очаги пожаров у точки щелчка на экране, не больше 20."""
-        layer = self.view.fires
-        data = layer.fires
-        if data is None:
-            return []
-        eye = np.asarray(self.view.camera.eye, dtype=np.float64)
-        shown = quakes.facing(eye, layer.focus, layer.lats, layer.lons) \
-            & quakes.in_window(layer.times, layer.window)
-        radius = IDENTIFY_PIXELS * self.view.devicePixelRatioF() * 2.0
-        pixels, front = self.view.camera.project(layer.focus)
-        gap = np.hypot(pixels[:, 0] - px, pixels[:, 1] - py)
-        near = np.nonzero(front & shown & (gap <= radius))[0]
-        near = near[np.argsort(gap[near])][:20]
-        features = []
-        for n in near:
-            n = int(n)
-            values = [(tr("Мощность излучения"), tr(
-                "{value} МВт", value="{:.1f}".format(data.frp[n])))]
-            if not np.isnan(data.time[n]):
-                values.append((tr("Время снимка, UTC"),
-                               when.text(float(data.time[n]))))
-            if data.confidence[n]:
-                values.append((tr("Достоверность"), data.confidence[n]))
-            values.append((tr("Снимок"), tr("ночной") if data.night[n]
-                           else tr("дневной")))
-            features.append(("{:.4f}, {:.4f}".format(data.lat[n],
-                                                     data.lon[n]),
-                             values, None))
-        return [(Group(tr("Пожары")), features)] if features else []

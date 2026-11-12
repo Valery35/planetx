@@ -289,8 +289,6 @@ class ThemesMixin:
             or any(tool.time_events()
                    for tool in getattr(self, "row_tools", {}).values()
                    if hasattr(tool, "time_events")) \
-            or bool(self.extras.get("fires")
-                    and self.view.fires.fires is not None) \
             or bool(self._data_marks)
         maps = bool(self._map_moments())
         # Часам и историческим картам, как и покрытию, нужен момент.
@@ -1009,7 +1007,6 @@ class ThemesMixin:
         self.view.set_relief(self._relief_target())
         self._update_water()
         self.subsurface.relief_changed()
-        self._place_fires()
         self._place_rows()
         if self._relief and self.terrain_loader is not None:
             self.terrain_loader.want((0, 0, 0), 1.0)

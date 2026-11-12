@@ -353,9 +353,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.paleo_url = paleo.TILE_URL
         self._paleo_sources = {}
         self.paleo_bar.ready = self._paleo_ready
-        # Пожары NASA FIRMS: очаги сводки и ждущий ответ.
-        self.fire_data = None
-        self._fire_reply = None
         # Википедия рядом (core/wikipedia.py): статьи по тайлам вида,
         # запрос первого абзаца открытой карточки.
         self.wiki_articles = WikiArticles(self.view, self._place_wiki,

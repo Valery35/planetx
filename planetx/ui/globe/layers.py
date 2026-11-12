@@ -20,7 +20,7 @@ from ...core import (basemap, cadastre, clouds, fields, geoid,
                      sun, tomography,
                      temperature, when, oldmaps,
                      rumsey as rumsey_core,
-                     fires as fires_core, crust,
+                     crust,
                      slabs, themes, tilemaps,
                      satellites as satellites_core,
                      trains as trains_core, vessels as vessels_core,
@@ -98,7 +98,6 @@ class LayersMixin:
         self.view.set_relief(self._relief_target())
         self._update_water()
         self.subsurface.relief_changed()
-        self._place_fires()
         self._place_rows()
         self._apply_vector(force=True)
         self._mark_dirty(False)
@@ -458,7 +457,6 @@ class LayersMixin:
         self.view.reset_heights()
         self.view.set_relief(self._relief_target())
         self._update_water()
-        self._place_fires()
         self._place_rows()
         self._mark_gallery()
         self._show_attribution()
@@ -619,8 +617,6 @@ class LayersMixin:
             parts.append(link_html(*sun.LIGHTS_ATTRIBUTION))
         if "sea" in self.gibs_loaders:
             parts.append(link_html(*temperature.ATTRIBUTION))
-        if self.view.fires.fires is not None:
-            parts.append(link_html(*fires_core.ATTRIBUTION))
         if self.view.wiki_marks:
             parts.append(link_html(*wikipedia.ATTRIBUTION))
         manager = getattr(self, "satellite_manager", None)

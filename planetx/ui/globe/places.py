@@ -17,7 +17,7 @@ from qgis.PyQt.QtWidgets import QFileDialog, QMessageBox
 
 from ... import journal
 from ...core import (demofiles, ellipsoid, when, oldmaps, pathflow, region,
-                     fires as fires_core, lookat, placetree, themes,
+                     lookat, placetree, themes,
                      opacity)
 from ...core.ellipsoid import geodetic_to_ecef
 from ...core.features import grown, has_alts
@@ -271,11 +271,6 @@ class PlacesMixin:
     def _update_timebar(self):
         """Охват шкалы времени по видимым меткам со временем."""
         times = [p.time for p in self.myplaces.places if p.visible]
-        # Пожары - так же, первый и последний снимок сводки.
-        fire = self.view.fires.fires if hasattr(self, "view") else None
-        fire_span = fires_core.span(fire) if fire is not None else None
-        if fire_span is not None:
-            times += [when.stamp(when.text(t)) for t in fire_span]
         # Тема NASA на шкале - первый и последний день её ряда.
         weather_on = getattr(self, "theme_key", "") \
             and self._theme_on() and themes.is_weather(self.theme_key)
@@ -346,10 +341,9 @@ class PlacesMixin:
         self._shadows_later()
 
     def _time_quakes(self):
-        """Пожары в промежутке шкалы времени, разрез следом. Очаги
-        землетрясений берут промежуток у исполнителя строки
+        """Разрез следом за шкалой времени. Очаги землетрясений
+        и пожаров берут промежуток у исполнителей строк
         (time_changed)."""
-        self.view.fires.window = self._time_range
         self.view.update()
         self._section_follow_time()
 

@@ -147,7 +147,6 @@ class BodyMixin:
         self.legend.hide()
         self.slope_legend.hide()
         self.insolation_legend.hide()
-        self.fire_legend.hide()
         for tool in self.row_tools.values():
             if hasattr(tool, "legend"):
                 tool.legend.hide()
@@ -237,8 +236,6 @@ class BodyMixin:
                                and self.planet.earth)
         self.insolation_legend.setVisible(
             self.insolation_result is not None)
-        self.fire_legend.setVisible(self.extras.get("fires", False)
-                                    and self.planet.earth)
         for tool in self.row_tools.values():
             if hasattr(tool, "sync_legend"):
                 tool.sync_legend()

@@ -17,7 +17,7 @@ from qgis.utils import iface
 
 from ... import journal
 from ...core import (basemap, geoid, paleo, dem as dem_model,
-                     fires as fires_core, crust,
+                     crust,
                      cutaway, slabs,
                      sources as datasources, tomography)
 from ...core.sync import ground_size, view_box
@@ -628,7 +628,6 @@ class EarthDataMixin:
         if self._relief_target() != self.view.store.scale:
             self.view.set_relief(self._relief_target())
             self._update_water()
-            self._place_fires()
             self._place_rows()
         self._place_attribution()
         if not shown:
@@ -681,53 +680,6 @@ class EarthDataMixin:
         """Ждущие ответы зон плит - в счётчик загрузки вида, его
         показывает значок загрузки."""
         self.view.data_pending = len(self._slab_replies)
-
-    def _set_fires(self, on):
-        """Пожары - строка группы «Планета огня» в общем выборе тем.
-        Сводка NASA FIRMS за 24 часа загружается при каждом включении.
-        Включённые пожары снимают тему."""
-        if on and (self.theme_key or self.extras.get("temperature")):
-            self.set_theme("fires")
-        self._mark_gallery()
-        self.fire_legend.setVisible(on and self.planet.earth
-                                    and self.view.sky_view is None)
-        self._place_attribution()
-        if not on:
-            if self._fire_reply is not None:
-                self._fire_reply.abort()
-            self._fire_reply = None
-            self._place_fires()
-            self._place_rows()
-            return
-        if self._fire_reply is None:
-            self._fire_reply = fetch_bytes(fires_core.FEED, self._fires_done,
-                                           prefer_cache=False)
-            self.view.data_pending += 1
-
-    def _fires_done(self, data, error):
-        if self._fire_reply is not None:
-            self.view.data_pending = max(0, self.view.data_pending - 1)
-        self._fire_reply = None
-        if data is not None:
-            self.fire_data = fires_core.parse(data.decode("utf-8",
-                                                          "replace"))
-        else:
-            self.message = (tr("Сводка пожаров не загрузилась: {error}",
-                               error=error), time.monotonic())
-            self._show_state()
-        self._place_fires()
-        self._place_rows()
-
-    def _place_fires(self):
-        """Очаги на глобус по нынешнему масштабу рельефа."""
-        on = self.extras.get("fires", False) and self.planet.earth
-        self.view.fires.set_fires(self.fire_data if on else None,
-                                  self.view.store.scale,
-                                  self._surface_ground)
-        self._update_timebar()
-        self._time_quakes()
-        self._show_attribution()
-        self.view.update()
 
     def _surface_ground(self, lats, lons):
         """Высоты нарисованной поверхности: с дном океана - дно."""

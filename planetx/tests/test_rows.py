@@ -58,6 +58,18 @@ class TestRegistry(unittest.TestCase):
         with self.assertRaises(rows.RowError):
             bad.place(())
 
+    def test_row_outside_catalog_is_not_placed(self):
+        # Пожары: карточку даёт выбор тем, в каталоге слоёв строки нет,
+        # а ключ, точки и умолчание - у реестра.
+        reg = rows.Registry().add(
+            rows.Row("fires", "fire", names, Tool, points="fires",
+                     catalog=False),
+            rows.Row("x", "g", names, after="a"))
+        self.assertEqual(reg.place((("a", "g"),)),
+                         (("a", "g"), ("x", "g")))
+        self.assertEqual(reg.points(), {"fires": "fires"})
+        self.assertEqual(reg.defaults(), {"fires": False, "x": False})
+
     def test_repeated_key_refused(self):
         reg = self.make()
         with self.assertRaises(rows.RowError):
