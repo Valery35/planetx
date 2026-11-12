@@ -38,7 +38,7 @@ from .base import (BRIENZ_LEVEL, DEMO_QUAKE_BAND, FLOW_LAYERS, FLOW_LIFT,
                    HAUL_CHECK, HAUL_COLOR, HAUL_END, HAUL_RATE,
                    FLOW_REACH, FLOW_TICK, FLOW_WIDER, GIBS_FADES, LAYER_FADE,
                    LAYER_FADE_TICK, OPACITY_DELAY, OPACITY_KEY, PLUGIN_DIR,
-                   POINT_LAYERS, POLE_FIRST, QGIS_LAYERS, REGION_MOVE,
+                   POINT_LAYERS, QGIS_LAYERS, REGION_MOVE,
                    moscow_maps)
 
 TEMP_KEY = "PlanetX/temporary_places"  # ключ папки «Временные метки»
@@ -303,10 +303,11 @@ class PlacesMixin:
                 and flow.currents_span() is not None:
             times += [when.stamp(when.text(t))
                       for t in flow.currents_span()]
-        # Магнитные полюса - с 1590 года по сегодня.
-        if self._magnetic_on():
-            times += [when.stamp(POLE_FIRST),
-                      when.stamp(when.text(time.time()))]
+        # Строки реестра со своим охватом (магнитные полюса - с 1590
+        # года по сегодня).
+        for tool in getattr(self, "row_tools", {}).values():
+            if hasattr(tool, "time_marks"):
+                times += tool.time_marks()
         # Треки и слои проекта со временем - их охват.
         times += getattr(self, "_data_marks", [])
         # Модели на треках KML (gx:Track с Model) - время их пути.
@@ -669,8 +670,9 @@ class PlacesMixin:
         shapes += getattr(self, "recognize_shapes", [])
         for area in getattr(self, "areas", ()):
             shapes += area.shapes()
-        shapes += self._pole_shapes()
-        shapes += getattr(self, "motion_shapes", [])
+        for tool in getattr(self, "row_tools", {}).values():
+            if hasattr(tool, "shapes"):
+                shapes += tool.shapes()
         if self._ruler_open():
             shape = self.ruler.shape()
             if shape is not None:

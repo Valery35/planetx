@@ -176,9 +176,7 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "fires": False, "satellites": False,
                   "trains": False, "vessels": False, "aircraft": False,
                   "currents": False, "cadastre": False,
-                  "magpoles": False, "geoid": False,
-                  "magdecl": False,
-                  "platemotion": False,
+                  "geoid": False,
                   "air": True, "iscgem": False,
                   "wiki": False,
                   **ROWS.defaults(),
@@ -189,36 +187,14 @@ SURFACE_EXTRAS = ("slope", "aspect")
 EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
                 "cutaway", "paleo", "fires", "satellites",
                 "trains", "vessels", "aircraft",
-                "currents", "cadastre", "magpoles",
-                "geoid", "magdecl",
-                "platemotion",
+                "currents", "cadastre",
+                "geoid",
                 "iscgem",
                 "wiki") \
     + ROWS.earth_keys()
 # Карты на общем слое вида «emag», на глобусе одна из них: карты
 # значений, Macrostrat, карты картинками, изменения местности и поля.
 EMAG_MAPS = ROWS.view_maps("emag")
-# Магнитные полюса: цвета следа и точки, подпись источников. Цвета -
-# выбор помощника, утверждает автор.
-POLE_COLORS = {"north": (235, 70, 60, 255), "south": (70, 130, 235, 255)}
-POLE_WIDTH = 2.0
-# Линии склонения: восточное - красные, западное - синие, агона -
-# зелёная толще. Подпись - у линии не короче DECL_LABEL_POINTS точек.
-# Выбор помощника, утверждает автор.
-DECL_EAST = (215, 70, 60, 220)
-DECL_WEST = (60, 110, 215, 220)
-DECL_ZERO = (40, 170, 70, 255)
-DECL_WIDTH = 1.4
-DECL_ZERO_WIDTH = 2.6
-DECL_LABEL_POINTS = 8
-# Стрелки скоростей плит (core/platemotion.py): цвет и толщина, выбор
-# помощника, утверждает автор.
-MOTION_COLOR = (255, 225, 60, 235)
-MOTION_WIDTH = 1.8
-POLE_FIRST = "1590-01-01"  # первый год таблицы NOAA
-MAGNETIC_ATTRIBUTION = ("IGRF-14 IAGA, NOAA NCEI",
-                        "https://www.ncei.noaa.gov/products/"
-                        "wandering-geomagnetic-poles")
 # Глубины морей и океанов - часть данных рельефа, флажок в свойствах
 # вида. Решение автора от 2 октября 2026 года, по умолчанию включены.
 SEA_KEY = "PlanetX/sea_depths"

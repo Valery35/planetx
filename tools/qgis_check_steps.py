@@ -29926,42 +29926,43 @@ def poles_on():
     from planetx.core import geomag, when
     from planetx.core.navigation import Pose
     window = state["window"]
+    mag = window.row_tool("magpoles")
     window.set_body("earth")
     window.view.navigator.stop()
     window.view.navigator.show(Pose(80.0, 100.0, 9000000.0, 0.0, 0.0))
     window.set_extra("magpoles", True)
     out = {"time_shown": window.timebar.shown(),
            "shapes_now": [(s.kind, s.name, len(s.points))
-                          for s in window._pole_shapes()]}
+                          for s in mag.shapes()]}
     lo = when.parse("1590-01-01")
     window.timebar.set_range(lo, when.parse("1900-07-02"))
-    out["year"] = round(window.magnetic_year(), 2)
-    points = [s.points[0] for s in window._pole_shapes()
+    out["year"] = round(mag.year(), 2)
+    points = [s.points[0] for s in mag.shapes()
               if s.kind == "point"]
-    model, poles = window.geomag
-    table = geomag.pole_at(poles["north"], window.magnetic_year())
+    model, poles = mag.geomag
+    table = geomag.pole_at(poles["north"], mag.year())
     out["north_1900"] = [round(v, 3) for v in points[0]]
     out["table_1900"] = [round(v, 3) for v in table]
-    out["trail_1900"] = [len(s.points) for s in window._pole_shapes()
+    out["trail_1900"] = [len(s.points) for s in mag.shapes()
                          if s.kind == "line"]
     # Левый бегунок обрезает начало следа - замечание пользователя от
     # 14 октября 2026 года. До правки след шёл с 1590 года.
     window.timebar.set_range(when.parse("1900-07-02"),
                              when.parse("2000-07-02"))
-    lines = [s for s in window._pole_shapes() if s.kind == "line"]
+    lines = [s for s in mag.shapes() if s.kind == "line"]
     out["trail_1900_2000"] = [len(s.points) for s in lines]
     out["trail_start"] = [round(v, 3) for v in lines[0].points[0]]
     out["table_1900_start"] = [round(v, 3) for v in geomag.pole_at(
         poles["north"], geomag.year_of(when.parse("1900-07-02")))]
     window.timebar.set_range(lo, when.parse("2020-01-01"))
     window._identify_at = None
-    groups = window._identify_magnetic(55.75, 37.62)
+    groups = mag.identify(55.75, 37.62)
     out["moscow_2020"] = groups[0][1][0][1] if groups else None
     out["attribution"] = "IGRF" in window.attribution.text()
     window.view.grabFramebuffer().save(os.path.join(TEMP,
                                                     "planetx_poles.png"))
     window.set_extra("magpoles", False)
-    out["shapes_off"] = len(window._pole_shapes())
+    out["shapes_off"] = len(mag.shapes())
     out["gl_errors"] = dict(window.view.gl_errors)
     result["poles"] = out
 
@@ -30537,18 +30538,24 @@ def platemotion_check():
     window = state["window"]
     view = window.view
     out = result["platemotion"] = {}
-    out["shapes"] = len(window.motion_shapes)
-    out["marks"] = len(window._motion_marks)
+    tool = window.row_tool("platemotion")
+    out["shapes"] = len(tool.shapes())
+    out["marks"] = len(tool.marks())
+    out["geo_marks"] = len(view.geo_marks)
     out["credit"] = "MORVEL" in window.attribution.text()
-    out["hawaii"] = window._motion_rows(19.7, -155.5)
+    out["hawaii"] = tool.place_values(19.7, -155.5)
+    out["hawaii_place"] = [value for _, items in
+                           window._identify_site(19.7, -155.5, None)
+                           for _, values, _ in items for value in values
+                           if value[0] in ("Плита", "Plate")]
     view.grabFramebuffer().save(os.path.join(TEMP, "planetx_platemotion.png"))
     # Сдвиг вида на шаг - стрелки заново.
     from planetx.core.navigation import Pose
     view.navigator.show(Pose(40.0, 20.0, 8000000.0, 0.0, 0.0))
-    window._update_plate_arrows()
-    out["moved_marks"] = len(window._motion_marks)
+    window._rows_view_changed()
+    out["moved_marks"] = len(tool.marks())
     window.set_extra("platemotion", False)
-    out["off"] = not window.motion_shapes and not view.geo_marks
+    out["off"] = not tool.shapes() and not view.geo_marks
     out["gl"] = dict(view.gl_errors)
 
 
@@ -30568,11 +30575,12 @@ def magdecl_on():
 @check(1000)
 def magdecl_check():
     window = state["window"]
+    mag = window.row_tool("magpoles")
     view = window.view
     out = result["magdecl"] = {}
     out["timebar"] = window.timebar.shown()
-    out["year"] = round(window.magnetic_year(), 2)
-    cache = getattr(window, "_decl_cache", None)
+    out["year"] = round(mag.year(), 2)
+    cache = mag.cache
     out["lines"] = len(cache[1]) if cache else 0
     out["levels"] = sorted({lvl for lvl, _ in cache[1]})[:5] if cache \
         else []
@@ -30591,15 +30599,16 @@ def magdecl_check():
 @check(1000)
 def magdecl_1800():
     window = state["window"]
+    mag = window.row_tool("magpoles")
     view = window.view
     out = result["magdecl"]
-    model = window.geomag[0]
-    if model.gufm is None and getattr(window, "_gufm_reply", None) \
+    model = mag.geomag[0]
+    if model.gufm is None and mag.gufm_reply \
             is not None and time.monotonic() - state["ls_started"] < 60.0:
         return 1000
     out["gufm"] = model.gufm is not None
     out["marks_1800"] = len(view.geo_marks)
-    found = window._identify_magnetic(51.5, -0.12)
+    found = mag.identify(51.5, -0.12)
     out["london_1800"] = found[0][1][0][1] if found else None
     out["credit_gufm"] = "gufm1" in window.attribution.text()
     view.grabFramebuffer().save(os.path.join(TEMP,

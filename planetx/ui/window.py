@@ -383,15 +383,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # на локальной копии хранилища planetx-terrain.
         self.slab_index = None
         self.slab_zones = {}
-        self.geomag = None  # (модель IGRF, таблицы полюсов), core/geomag
-        # Линии склонения: (год, линии) и подписи.
-        self._decl_cache = None
-        self._decl_marks = []
-        # Скорости плит (core/platemotion.py): модель, стрелки, подписи.
-        self.plate_motion = None
-        self.motion_shapes = []
-        self._motion_marks = []
-        self._motion_key = None
         # Адреса тайлов карт значений (core/fields.py), шаги проверки
         # ставят локальную копию planetx-terrain.
         self.field_urls = {key: fields.url(f)
@@ -986,7 +977,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self._value_field = None
         self._value_key = None
         self.view.changed.connect(self._update_values)
-        self.view.changed.connect(self._update_plate_arrows)
+        self.view.changed.connect(self._rows_view_changed)
         self.view.changed.connect(self._update_contour_legend)
         self.view.changed.connect(self._overpass_view_changed)
         self.view.changed.connect(self._wiki_view_changed)

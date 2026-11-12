@@ -351,12 +351,6 @@ class StateMixin:
             self._set_paleo(on)
         elif key == "iscgem":
             self._set_history(on)
-        elif key == "magpoles":
-            self._set_poles(on)
-        elif key == "magdecl":
-            self._set_magdecl(on)
-        elif key == "platemotion":
-            self._set_platemotion(on)
         elif key == "geoid":
             self._set_geoid(on)
         elif key == "satellites":

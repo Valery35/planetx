@@ -461,7 +461,6 @@ class IdentifyMixin:
             px, py, IDENTIFY_PIXELS * self.view.devicePixelRatioF())
         if under:
             groups.append((Group(tr("Подземное")), under))
-        groups += self._identify_magnetic(lat, lon)
         groups += self._identify_rows(lat, lon, tolerance)
         groups += self._identify_wayback()
         groups += self._identify_site(lat, lon, height)

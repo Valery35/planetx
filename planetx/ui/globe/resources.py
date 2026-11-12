@@ -5,7 +5,6 @@
 место под щелчком, координаты под курсором.
 
 Часть окна глобуса GlobeWindow (ui/window.py)."""
-import os
 import time
 
 import numpy as np
@@ -15,14 +14,11 @@ from ...core.measure import surface_level
 from ...core.flight import Flight
 from ...core.navigation import ground_under
 from ...core.skyview import ra_dec_text
-from ...core import platemotion, slabs
-from ...core.features import Shape
-from ...core.places import Place as MarkPlace
+from ...core import slabs
 from ...i18n import tr
 from ...render.view import OBJECT_BUDGET, start_keys
 from ..identify import Group, point_text
-from .base import (CURSOR_PERIOD, DATA_DIR,
-                   MESSAGE_TIME, MOTION_COLOR, MOTION_WIDTH, distance_text)
+from .base import CURSOR_PERIOD, MESSAGE_TIME, distance_text
 
 
 class ResourcesMixin:
@@ -59,79 +55,6 @@ class ResourcesMixin:
         self.message = (tr("Сервер OpenStreetMap не ответил, запрос "
                            "повторится сам."), time.monotonic())
         self._show_state()
-
-    # Скорости плит NNR-MORVEL56 (core/platemotion.py).
-
-    def _motion_on(self):
-        # Зовётся и при создании окна, до чтения строк «Слоёв».
-        return bool(getattr(self, "extras", {}).get("platemotion")) \
-            and self.planet.earth and self.view.sky_view is None
-
-    def _set_platemotion(self, on):
-        """Строка «Скорости плит»: стрелки у вида и подписи мм/год.
-        Файл data/plate_motion.json читается при первом включении."""
-        if on and self.plate_motion is None:
-            try:
-                with open(os.path.join(DATA_DIR, "plate_motion.json"),
-                          encoding="utf-8") as fh:
-                    self.plate_motion = platemotion.read(fh.read())
-            except (OSError, ValueError, KeyError) as error:
-                self.message = (tr("Скорости плит не прочитаны: {error}",
-                                   error=str(error)), time.monotonic())
-                self._show_state()
-                return
-        self._motion_key = None
-        self._update_plate_arrows()
-        self._show_attribution()
-        self._mark_gallery()
-
-    def _update_plate_arrows(self):
-        """Стрелки строятся заново, когда меняется шаг узлов или вид
-        уходит на шаг, как сетка координат."""
-        if not self._motion_on() or self.plate_motion is None:
-            if self.motion_shapes or self._motion_marks:
-                self.motion_shapes = []
-                self._motion_marks = []
-                self._motion_key = None
-                self._set_geo_marks()
-                self._refresh_shapes()
-            return
-        pose = self.view.navigator.pose
-        width = self._view_width()
-        step = platemotion.step_for(width)
-        key = (step, round(pose.lat / step), round(pose.lon / step))
-        if key == self._motion_key:
-            return
-        self._motion_key = key
-        shapes = []
-        marks = []
-        for n, (lat, lon, speed, _, lines) in enumerate(
-                platemotion.arrows(self.plate_motion, pose.lat, pose.lon,
-                                   width)):
-            for line in lines:
-                shapes.append(Shape("line", line, color=MOTION_COLOR,
-                                    width=MOTION_WIDTH))
-            marks.append(MarkPlace(-700000 - n, "{:.0f}".format(speed),
-                                   "grid", 1, lat, lon))
-        self.motion_shapes = shapes
-        self._motion_marks = marks
-        self._set_geo_marks()
-        self._refresh_shapes()
-
-    def _motion_rows(self, lat, lon):
-        """Строки скорости плиты для окна «Объекты» или []."""
-        if not self._motion_on() or self.plate_motion is None:
-            return []
-        found = self.plate_motion.velocity(lat, lon)
-        if found is None:
-            return []
-        code, east, north = found
-        speed, azimuth = platemotion.speed_azimuth(east, north)
-        return [(tr("Плита"), "{} ({})".format(
-                    self.plate_motion.names[code], code)),
-                (tr("Скорость плиты"), tr("{value} мм/год",
-                                          value="{:.1f}".format(speed))),
-                (tr("Направление"), "{:.0f}°".format(azimuth))]
 
     def _set_currents(self, on):
         """Строка «Течения» витрины: струйки течений и шкала."""
@@ -205,7 +128,9 @@ class ResourcesMixin:
                 bottom="{:.0f}".format(bottom[0]))))
         elif any(c in self._slab_replies for c in codes):
             values.append((tr("Плита Slab2"), tr("загружается")))
-        values += self._motion_rows(lat, lon)
+        for tool in self.row_tools.values():
+            if hasattr(tool, "place_values"):
+                values += tool.place_values(lat, lon)
         return [(Group(tr("Место")), [(tr("Под точкой"), values, None)])] \
             if values else []
 
