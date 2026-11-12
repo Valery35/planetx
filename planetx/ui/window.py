@@ -1008,11 +1008,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
                           or {}).values():
                 reply.abort()
             self._demo_replies = None
-            reply, self._parcel_reply = \
-                getattr(self, "_parcel_reply", None), None
-            self._parcels = None
-            if reply is not None:
-                reply.abort()
             self.layer_labels.close()
             if self.identified is not None:
                 self.identified.close()

@@ -16,7 +16,7 @@ from qgis.PyQt.QtCore import QEvent
 from qgis.PyQt.QtWidgets import QInputDialog, QMessageBox
 
 from ... import journal
-from ...core import (basemap, cadastre, clouds, fields, geoid,
+from ...core import (basemap, clouds, fields, geoid,
                      sun, tomography,
                      temperature, when, oldmaps,
                      rumsey as rumsey_core,
@@ -580,8 +580,6 @@ class LayersMixin:
                 | self.view.polar_pending.keys() \
                 and "Earthstar" not in self.source.attribution[0]:
             parts.append(link_html(polar.CREDIT, polar.TERMS))
-        if "cadastre" in self.gibs_loaders:
-            parts.append(link_html(*cadastre.ATTRIBUTION))
         if "emag" in self.gibs_loaders and self._row_map_shown():
             parts.append(link_html(*self.row_tool(
                 self._row_map_shown()).credit()))

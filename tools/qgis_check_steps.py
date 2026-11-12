@@ -30038,9 +30038,9 @@ def cadastre_info():
     ratio = view.devicePixelRatioF()
     window.identify_here(view.width() * ratio / 2.0,
                          view.height() * ratio / 2.0)
+    parcels = window.row_tool("cadastre").parcels
     result["cadastre_info"] = {
-        "waiting": window._parcels is not None
-        and window._parcels[1] is None}
+        "waiting": parcels is not None and parcels[1] is None}
     state["ls_started"] = time.monotonic()
 
 
@@ -30048,7 +30048,8 @@ def cadastre_info():
 def cadastre_info_check():
     from qgis.PyQt.QtWidgets import QApplication
     window = state["window"]
-    parcels = window._parcels
+    tool = window.row_tool("cadastre")
+    parcels = tool.parcels
     spent = time.monotonic() - state["ls_started"]
     if parcels is not None and parcels[1] is None and not parcels[2] \
             and spent < 30.0:
@@ -30058,7 +30059,7 @@ def cadastre_info_check():
     out["error"] = parcels[2] if parcels else "no state"
     out["numbers"] = [p["number"] for p in parcels[1] or ()] \
         if parcels else []
-    out["outline_shapes"] = len(window.parcel_shapes)
+    out["outline_shapes"] = len(tool.outlines)
     tree = window.identified.tree
     rows = {}
     take = None
@@ -30080,7 +30081,7 @@ def cadastre_info_check():
     window.view.grabFramebuffer().save(os.path.join(
         TEMP, "planetx_parcel.png"))
     window.set_extra("cadastre", False)
-    out["outline_after_off"] = len(window.parcel_shapes)
+    out["outline_after_off"] = len(tool.outlines)
     out["gl_errors"] = dict(window.view.gl_errors)
     return None
 

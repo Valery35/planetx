@@ -646,7 +646,6 @@ class PlacesMixin:
             for manager in getattr(self, "live_managers", ()):
                 shapes += manager.shapes()
         shapes += getattr(self, "grid_shapes", [])
-        shapes += getattr(self, "parcel_shapes", [])
         shapes += getattr(self, "class_shapes", [])
         shapes += getattr(self, "recognize_shapes", [])
         for area in getattr(self, "areas", ()):

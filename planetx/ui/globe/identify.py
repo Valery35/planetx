@@ -14,16 +14,15 @@ from qgis.PyQt.QtWidgets import QMessageBox
 from qgis.utils import iface
 
 from ... import journal
-from ...core import (basemap, cadastre, when, assistant as assistant_core,
+from ...core import (basemap, when, assistant as assistant_core,
                      pick)
 from ...core.ellipsoid import ecef_to_geodetic
-from ...core.features import Shape
 from ...core.navigation import focal, ground_under
 from ...core.planets import PLANETS
 from ...core.skyview import ra_dec_of
 from ...core.kml import KmlError, read_kml, write_kml
 from ...i18n import tr
-from ...net.overlay import VECTOR_GROUPS, fetch_bytes
+from ...net.overlay import VECTOR_GROUPS
 from ...qt_compat import enum
 from ..identify import Group, IdentifyDialog, identify, point_text
 from ..assistant import (AssistantDialog, current_provider, ready,
@@ -35,8 +34,8 @@ from ..placecard import (Card, FeatureCard, PlaceCard, explain_question,
                          feature_question)
 from ..relations import feature_title, related
 from ..tilesource import save_connection
-from .base import (EXTRA_DEFAULTS, IDENTIFY_PIXELS, PARCEL_COLOR, PARCEL_FILL,
-                   all_sources, distance_text, parcel_labels)
+from .base import (EXTRA_DEFAULTS, IDENTIFY_PIXELS, all_sources,
+                   distance_text)
 
 # Строки «Слоёв», которые помощнику о месте ничего не говорят.
 QUIET_LAYERS = ("stars", "air", "wiki")
@@ -373,79 +372,9 @@ class IdentifyMixin:
         # уточняется по приходу других сведений без нового запроса.
         self._cloud_hits = self.pointclouds.identify(
             camera, px, py, IDENTIFY_PIXELS * view.devicePixelRatioF())
-        self._ask_parcels(lat, lon)
         self._ask_rows(lat, lon)
         self._ask_wayback(lat, lon)
         self._show_identified()
-
-    # Сведения об участках кадастра Росреестра (core/cadastre.py).
-
-    def _ask_parcels(self, lat, lon):
-        """Запрос сведений об участках под щелчком, когда показан
-        кадастр. Один запрос на щелчок, прежний снимается."""
-        self._drop_parcels()
-        if not (self.extras.get("cadastre") and self.planet.earth):
-            return
-        point = (lat, lon)
-        self._parcels = (point, None, "")
-        self._parcel_reply = fetch_bytes(
-            cadastre.info_url(lat, lon),
-            lambda data, error: self._parcels_arrived(point, data, error),
-            fresh=True, headers={"Referer": cadastre.REFERER})
-
-    def _drop_parcels(self):
-        """Снять запрос, сведения и подсветку участков."""
-        reply = getattr(self, "_parcel_reply", None)
-        self._parcel_reply = None
-        self._parcels = None
-        if reply is not None:
-            reply.abort()
-        if getattr(self, "parcel_shapes", None):
-            self.parcel_shapes = []
-            self._refresh_shapes()
-
-    def _parcels_arrived(self, point, data, error):
-        state = getattr(self, "_parcels", None)
-        if state is None or state[0] != point:
-            return  # ответ снятого или прежнего запроса
-        self._parcel_reply = None
-        parcels = None
-        if data is not None:
-            try:
-                parcels = cadastre.parse_info(data)
-            except (ValueError, UnicodeDecodeError) as problem:
-                error = str(problem)
-        self._parcels = (point, parcels, error or "")
-        self.parcel_shapes = [
-            Shape("polygon", ring, color=PARCEL_COLOR, width=3.0,
-                  fill=PARCEL_FILL)
-            for parcel in parcels or () for ring in parcel["rings"]]
-        self._refresh_shapes()
-        self._refresh_identified()
-
-    def _identify_parcels(self):
-        """Группа «Кадастр Росреестра» окна «Объекты»."""
-        state = getattr(self, "_parcels", None)
-        if state is None:
-            return []
-        (lat, lon), parcels, error = state
-        if parcels is None and not error:
-            features = [(tr("Запрос к НСПД…"), [], None)]
-        elif parcels is None:
-            features = [(tr("НСПД не ответила"), [(tr("Ошибка"), error)],
-                         None)]
-        elif not parcels:
-            features = [(tr("Участков под точкой нет"), [], None)]
-        else:
-            link = cadastre.map_link(lat, lon)
-            labels = parcel_labels()
-            features = [(tr("Земельный участок {number}",
-                            number=p["number"]),
-                         [(labels.get(key, key), value)
-                          for key, value in p["values"]]
-                         + [(tr("Карта НСПД"), link)], None)
-                        for p in parcels]
-        return [(Group(tr("Кадастр Росреестра")), features)]
 
     def _show_identified(self):
         """Окно «Объекты» по последнему щелчку: слои проекта, «Мои
@@ -459,7 +388,6 @@ class IdentifyMixin:
         for name, values in getattr(self, "_cloud_hits", ()):
             groups.append((Group(tr("Облако точек «{name}»", name=name)),
                            [(tr("Точка облака"), values, None)]))
-        groups += self._identify_parcels()
         groups += self._identify_places(lat, lon, tolerance)
         groups += self._pick_rows(px, py)
         groups += [group for tool in self.row_tools.values()

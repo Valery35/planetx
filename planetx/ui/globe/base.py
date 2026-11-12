@@ -57,7 +57,7 @@ FLOW_LAYERS = {"currents": "currents"}
 GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
               "aspect": ("slope",), "contours": ("contours",),
               "temperature": ("sea", "land"), "map": ("theme", "compare"),
-              "currents": ("currents",), "cadastre": ("cadastre",),
+              "currents": ("currents",),
               **ROWS.fades()}
 QGIS_LAYERS = ROWS.qgis_keys()
 # Раскраски: в проект - сеткой значений или картинкой WMS GIBS.
@@ -76,7 +76,7 @@ SECTION_TIME_PAUSE = 400
 WAYBACK_PAUSE = 700
 # Порядок строк «На глобусе»: слои витрины, слои «Карты», карты витрины.
 ACTIVE_ORDER = tuple(key for key, _ in GALLERY_LAYERS) + (
-    "grid", "buildings", "contours", "cadastre", "fires", "temperature")
+    "grid", "buildings", "contours", "fires", "temperature")
 # Каталог «Добавить данные» в левой панели: панель не уже, пиксели.
 # Горизонтали тел - на столько уровней глубже уровня высот тела, по
 # пересчитанному предку. У Марса пиксель уровня 5 около 2.6 км, уровня
@@ -173,7 +173,7 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "slope": False, "aspect": False, "contours": False,
                   "cutaway": False, "paleo": False,
                   "satellites": False,
-                  "currents": False, "cadastre": False,
+                  "currents": False,
                   "geoid": False,
                   "air": True,
                   **ROWS.defaults(),
@@ -183,7 +183,7 @@ SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
 EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun",
                 "cutaway", "paleo", "satellites",
-                "currents", "cadastre",
+                "currents",
                 "geoid") \
     + ROWS.earth_keys()
 # Карты на общем слое вида «emag», на глобусе одна из них: карты
@@ -221,31 +221,6 @@ MODEL_TILT = 60.0
 GRID_COLOR = (220, 220, 220, 255)
 GRID_WIDTH = 1.0
 CIRCLE_COLOR = (255, 230, 0, 255)  # экватор, тропики, полярные круги
-# Подсветка участка кадастра под щелчком, как выделение на карте НСПД.
-# Цвета - выбор помощника, утверждает автор.
-PARCEL_COLOR = (200, 0, 200, 255)
-PARCEL_FILL = (230, 120, 230, 90)
-
-
-def parcel_labels():
-    """Подписи полей сведений об участке, ключи - core.cadastre.FIELDS."""
-    return {
-        "cad_num": tr("Кадастровый номер"),
-        "readable_address": tr("Адрес"),
-        "specified_area": tr("Площадь уточнённая"),
-        "declared_area": tr("Площадь декларированная"),
-        "land_record_category_type": tr("Категория земель"),
-        "permitted_use_established_by_document":
-            tr("Вид разрешённого использования"),
-        "ownership_type": tr("Форма собственности"),
-        "right_type": tr("Вид права"),
-        "cost_value": tr("Кадастровая стоимость"),
-        "cost_index": tr("Удельная кадастровая стоимость"),
-        "cost_determination_date": tr("Дата определения стоимости"),
-        "cost_application_date": tr("Дата применения стоимости"),
-        "land_record_reg_date": tr("Дата постановки на учёт"),
-        "status": tr("Статус"),
-        "quarter_cad_number": tr("Кадастровый квартал")}
 SCALE_KEY = "PlanetX/relief_scale"  # вертикальный масштаб рельефа
 LANGUAGE_KEY = "PlanetX/label_language"  # язык подписей
 COORDS_KEY = "PlanetX/coords"  # формат координат

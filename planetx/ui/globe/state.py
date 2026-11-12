@@ -334,10 +334,6 @@ class StateMixin:
             self._set_surface()
         elif key == "currents":
             self._set_currents(on)
-        elif key == "cadastre":
-            self._set_gibs("cadastre", on and self.planet.earth, cache=True)
-            if not on:
-                self._drop_parcels()
         elif key == "cutaway":
             self._set_cutaway(on)
         elif key == "paleo":
