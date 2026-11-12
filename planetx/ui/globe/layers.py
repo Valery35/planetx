@@ -22,9 +22,7 @@ from ...core import (basemap, cadastre, clouds, fields, geoid,
                      rumsey as rumsey_core,
                      crust,
                      slabs, themes, tilemaps,
-                     satellites as satellites_core,
-                     trains as trains_core, vessels as vessels_core,
-                     aircraft as aircraft_core)
+                     satellites as satellites_core)
 from ...core import sources as datasources
 from ...core import (hips, oam, polar,
                      wikipedia)
@@ -622,16 +620,6 @@ class LayersMixin:
         manager = getattr(self, "satellite_manager", None)
         if manager is not None and manager.on and manager.count():
             parts.append(link_html(*satellites_core.ATTRIBUTION))
-        manager = getattr(self, "train_manager", None)
-        if manager is not None and manager.on and manager.count() \
-                and self.planet.earth:
-            parts.append(link_html(*trains_core.ATTRIBUTION))
-        for name, core_module in (("vessel_manager", vessels_core),
-                                  ("aircraft_manager", aircraft_core)):
-            manager = getattr(self, name, None)
-            if manager is not None and manager.on and manager.count() \
-                    and self.planet.earth:
-                parts.append(link_html(*core_module.ATTRIBUTION))
         if self.planet.earth and self._rumsey_shown():
             parts.append(link_html(*rumsey_core.ATTRIBUTION))
         if self.planet.earth and self._oam_shown():

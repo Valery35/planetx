@@ -10,7 +10,7 @@
 from ..core.rows import Registry
 from . import (aef, cables, deposits, faults, fieldmap, fires, geomap, infra,
                magnetic, miningareas, plants, platemotion, plates, quakes,
-               tilemaps, tileoverlays, valuemaps, volcanoes)
+               tilemaps, tileoverlays, transport, valuemaps, volcanoes)
 
 ROWS = Registry().add(
     *fieldmap.ROWS,
@@ -30,6 +30,7 @@ ROWS = Registry().add(
     *magnetic.ROWS,
     *quakes.ROWS,
     *fires.ROWS,
+    *transport.ROWS,
     *plants.ROWS,
     *deposits.ROWS,
 )

@@ -295,9 +295,7 @@ class IdentifyMixin:
         2026 года «клик по точкам ничего не даёт»."""
         return bool(self._pick_rows(px, py)
                     or self._lines_under(px, py)
-                    or self._identify_satellites(px, py)
-                    or self._identify_trains(px, py)
-                    or self._identify_live(px, py))
+                    or self._identify_satellites(px, py))
 
     def _pick_rows(self, px, py):
         """Точки строк реестра у пикселя кадра (исполнители с pick)."""
@@ -446,9 +444,7 @@ class IdentifyMixin:
         groups += self._identify_places(lat, lon, tolerance)
         groups += self._pick_rows(px, py)
         groups += self._identify_wiki(px, py)
-        groups = self._identify_satellites(px, py) \
-            + self._identify_trains(px, py) \
-            + self._identify_live(px, py) + groups
+        groups = self._identify_satellites(px, py) + groups
         under = self.subsurface.identify(
             px, py, IDENTIFY_PIXELS * self.view.devicePixelRatioF())
         if under:
@@ -920,19 +916,3 @@ class IdentifyMixin:
         features = [(name, values, None) for name, values in found]
         return [(Group(tr("Спутники")), features)] if features else []
 
-    def _identify_trains(self, px, py):
-        """Поезда у точки щелчка на экране, группа окна «Объекты»."""
-        found = self.train_manager.identify(px, py)
-        features = [(name, values, None) for name, values in found]
-        return [(Group(tr("Поезда")), features)] if features else []
-
-    def _identify_live(self, px, py):
-        """Суда и самолёты у точки щелчка, группы окна «Объекты»."""
-        out = []
-        for title, manager in ((tr("Суда"), self.vessel_manager),
-                               (tr("Самолёты"), self.aircraft_manager)):
-            features = [(name, values, None)
-                        for name, values in manager.identify(px, py)]
-            if features:
-                out.append((Group(title), features))
-        return out

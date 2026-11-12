@@ -173,7 +173,6 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "slope": False, "aspect": False, "contours": False,
                   "cutaway": False, "paleo": False,
                   "satellites": False,
-                  "trains": False, "vessels": False, "aircraft": False,
                   "currents": False, "cadastre": False,
                   "geoid": False,
                   "air": True,
@@ -185,7 +184,6 @@ SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
 EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun",
                 "cutaway", "paleo", "satellites",
-                "trains", "vessels", "aircraft",
                 "currents", "cadastre",
                 "geoid",
                 "wiki") \

@@ -9390,8 +9390,8 @@ def trains_near_check():
             lat, lon, view.label_height(lat, lon))], dtype=np.float64)
         pixels_xy, front = view.camera.project(point)
         if front[0]:
-            found = window._identify_trains(float(pixels_xy[0][0]),
-                                            float(pixels_xy[0][1]))
+            found = window._pick_rows(float(pixels_xy[0][0]),
+                                      float(pixels_xy[0][1]))
             if found:
                 picked = [found[0][1][0][0]] + [
                     v for v in found[0][1][0][1][:3]]
@@ -10510,8 +10510,8 @@ def _live_pick(window, manager):
         if not front[0] or not (0 <= pixels[0][0] < view.camera.width
                                 and 0 <= pixels[0][1] < view.camera.height):
             continue
-        found = window._identify_live(float(pixels[0][0]),
-                                      float(pixels[0][1]))
+        found = window._pick_rows(float(pixels[0][0]),
+                                  float(pixels[0][1]))
         if found:
             name, values, _ = found[0][1][0]
             return [name] + [list(v) for v in values[:4]]

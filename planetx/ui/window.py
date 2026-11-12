@@ -50,9 +50,7 @@ from .legend import (BedsLegend, ContourLegend, CutawayLegend,
                      FireLegend, InsolationLegend, LegendPanel, QuakeLegend,
                      SlopeLegend, TemperatureLegend, ThemeLegend,
                      ClassLegend, CurrentLegend, FieldLegend,
-                     PointCloudLegend, SiteLegend,
-                     TrainLegend,
-                     VesselLegend, AircraftLegend)
+                     PointCloudLegend, SiteLegend)
 from .overlays import GroundLayers, ScreenOverlays
 from .spinner import LoadSpinner
 from .handles import DrawVertices, Handles
@@ -94,8 +92,6 @@ from .routing import RouteManager
 from .weather import WeatherManager
 from .satellites import SatelliteManager
 from .track import TrackManager
-from .trains import TrainManager
-from .live import AircraftManager, VesselManager
 from .flightsim import FlightSim
 from .swipe import SwipeBar
 from .sync import MapSync
@@ -893,28 +889,11 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # Спутники CelesTrak - строка с группами (ui/satellites.py).
         self.satellite_manager = SatelliteManager(self)
         self.satellite_manager.changed.connect(self._show_attribution)
-        # Поезда Финляндии вживую (ui/trains.py).
-        self.train_manager = TrainManager(self)
-        self.train_manager.changed.connect(self._show_attribution)
-        self.train_legend = TrainLegend(self.view)
-        self.train_legend.hide()
-        self.legend_panel.add(self.train_legend)
-        self.train_legend.closer = lambda: self.set_extra("trains", False)
-        # Суда Балтики и самолёты вживую (ui/live.py).
-        self.vessel_manager = VesselManager(self)
-        self.aircraft_manager = AircraftManager(self)
-        self.vessel_legend = VesselLegend(self.view)
-        self.aircraft_legend = AircraftLegend(self.view)
-        for key, manager, legend in (
-                ("vessels", self.vessel_manager, self.vessel_legend),
-                ("aircraft", self.aircraft_manager, self.aircraft_legend)):
-            manager.changed.connect(self._show_attribution)
-            legend.hide()
-            self.legend_panel.add(legend)
-            legend.closer = lambda key=key: self.set_extra(key, False)
-        # Живые объекты: запись облёта ведёт их по своим часам.
-        self.live_managers = (self.train_manager, self.vessel_manager,
-                              self.aircraft_manager)
+        # Живые объекты - поезда, суда, самолёты (ui/transport.py):
+        # запись облёта ведёт их по своим часам.
+        self.live_managers = tuple(
+            tool.manager for tool in self.row_tools.values()
+            if hasattr(tool, "manager"))
         # Режим полёта своего самолёта (ui/flightsim.py).
         self.flight = FlightSim(self)
         self.route_manager = RouteManager(self)
@@ -1020,9 +999,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self._layer_time_timer.stop()
             self._link_timer.stop()
             self.satellite_manager.close()
-            self.train_manager.close()
-            self.vessel_manager.close()
-            self.aircraft_manager.close()
             self.flight.close()
             self.title_bars.close()
             self.route_manager.close()
