@@ -25,7 +25,13 @@ time_events(), wedge_changed(), place_values(lat, lon) - строки групп
 pixel_groups(px, py) - группы окна «Объекты» по пикселю, credits() -
 пары подписи источников, legend и sync_legend() - шкала строки,
 base_source() - подложка Земли вместо выбранной, flat_relief() - рельеф
-выключен.
+выключен, needs_clock() - нужны часы глобуса, surface_changed()
+и basemap_changed(source) - смена слоя высот и подложки, export_jobs(path)
+и export_picture(...) - выгрузка «В проект QGIS…», thumb(key, tile, base) -
+превью каталога, crust_changed() и slabs_changed() - пришли кора
+CRUST1.0 и зоны плит, vertex_tool() - ручки вида без окон, tool_marks() -
+подписи ручек, vector_ready(), vector_changed() и vector_credit() -
+приход и смена векторной основы, нужна ли её подпись.
 """
 
 
