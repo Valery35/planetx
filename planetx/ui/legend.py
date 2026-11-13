@@ -1229,10 +1229,13 @@ class LegendPanel(QWidget):
         self.changed = None
         self.hide()
 
-    def add(self, legend):
+    def add(self, legend, before=None):
+        """Шкала в конец панели или перед шкалой before."""
         legend.setParent(self)
-        self.layout_.addWidget(legend)
-        self.legends.append(legend)
+        at = self.legends.index(before) if before in self.legends \
+            else len(self.legends)
+        self.layout_.insertWidget(at, legend)
+        self.legends.insert(at, legend)
         legend.installEventFilter(self)
         self.refit()
 

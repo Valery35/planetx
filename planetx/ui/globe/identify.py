@@ -706,7 +706,7 @@ class IdentifyMixin:
         if not self.extras.get("cutaway"):
             self.set_extra("cutaway", True)
         if west is not None and east is not None:
-            self.set_wedge_box(west, east, south, north)
+            self.row_tool("cutaway").set_box(west, east, south, north)
         wedge = self.view.wedge
         return tr("Сектор: {wedge}.", wedge=", ".join(
             "{:.1f}".format(v) for v in wedge))

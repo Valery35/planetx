@@ -11,7 +11,6 @@ import time
 
 import numpy as np
 from qgis.core import QgsApplication, QgsProject, QgsSettings
-from qgis.PyQt.QtCore import QTimer
 from qgis.PyQt.QtWidgets import QFileDialog
 from qgis.utils import iface
 
@@ -19,19 +18,15 @@ from ... import journal
 from ...core import (basemap, dem as dem_model,
                      crust,
                      cutaway, slabs,
-                     sources as datasources, tomography)
+                     sources as datasources)
 from ...core.sync import ground_size, view_box
 from ...core.terrain import MAX_LEVEL as TERRAIN_MAX
 from ...i18n import tr
-from ...net.gdalnet import executor
 from ...net.overlay import (OPENFREEMAP_ATTRIBUTION, fetch_bytes, fetch_mirror,
                             fetch_json)
 from ..inset import DeepSource, DemSource, warm as warm_gdal
 from .. import export as layer_export
-from ..overpass import brief_error
-from ..tomo import parse_tomo
-from .base import (DATA_DIR, DEPOSIT_POLL, SEA_KEY,
-                   STRETCH_KEY, TOMO_KEY,
+from .base import (DATA_DIR, SEA_KEY,
                    TERRAIN_ATTRIBUTION, TERRAIN_MIRRORS, all_sources,
                    link_html)
 
@@ -242,156 +237,6 @@ class EarthDataMixin:
         # Уклон и экспозиция тоже считают дно.
         self._set_surface()
 
-    def _set_cutaway(self, on):
-        """Разрез Земли строкой раздела «Слои»: сектор под точкой
-        взгляда в момент включения."""
-        self.cutaway_legend.setVisible(on)
-        self._place_attribution()
-        if not on:
-            self.view.set_wedge(None)
-            if self.view.vertex_tool is self.wedge_corners:
-                self.view.vertex_tool = None
-            self._update_tool_marks()
-            self._wedge_gain_changed()
-            self._show_slabs()
-            return
-        if self.view.wedge is None:
-            pose = self.view.navigator.pose
-            self.view.set_wedge(cutaway.wedge_at(pose.lat, pose.lon),
-                                self.crust)
-            self._wedge_gain_changed()
-            self._want_slabs()
-        if self.view.vertex_tool is None:
-            self.view.vertex_tool = self.wedge_corners
-        self._update_tool_marks()
-        # Модель, не пришедшая раньше, просится снова при включении.
-        if self.crust is None and self._crust_reply is None:
-            self.crust_error = None
-        self._want_crust()
-        if self.panel.cutaway_tomo:
-            self.set_cutaway_tomo(True)
-        self._show_attribution()
-
-    def set_wedge_box(self, west, east, south, north):
-        """Сектор разреза Земли по границам в градусах, при включённой
-        строке «Разрез Земли». Так его ставят помощник и сцена."""
-        if not self.planet.earth or not self.extras.get("cutaway"):
-            return False
-        self.view.set_wedge(cutaway.make_wedge(west, east, south, north),
-                            self.crust)
-        self._wedge_gain_changed()
-        self._want_slabs()
-        self._update_tool_marks()
-        return True
-
-    def _wedge_gain_changed(self):
-        """Растяжение коры сменилось: очаги и шкала оболочек следом."""
-        self.cutaway_legend.set_gain(self.view.wedge_gain)
-        self._place_attribution()
-        for tool in self.row_tools.values():
-            if hasattr(tool, "wedge_changed"):
-                tool.wedge_changed()
-
-    def cutaway_stretch(self):
-        """Растягивать ли кору разреза издалека - настройка пункта меню
-        строки «Разрез Земли», по умолчанию да."""
-        return QgsSettings().value(STRETCH_KEY, True, type=bool)
-
-    def set_cutaway_stretch(self, on):
-        """Пункт «Растягивать кору»: грани, плиты и очаги заново."""
-        QgsSettings().setValue(STRETCH_KEY, bool(on))
-        self.panel.cutaway_stretch = bool(on)
-        self.view.set_wedge_stretch(on)
-        self._wedge_gain_changed()
-
-    # Томография мантии на гранях разреза (core/tomography.py).
-
-    def cutaway_tomo(self):
-        """Раскрашивать ли мантию разреза томографией - настройка пункта
-        меню строки «Разрез Земли», по умолчанию нет."""
-        return QgsSettings().value(TOMO_KEY, False, type=bool)
-
-    @staticmethod
-    def _tomo_path():
-        folder = os.path.join(QgsApplication.qgisSettingsDirPath(),
-                              "PlanetX")
-        os.makedirs(folder, exist_ok=True)
-        return os.path.join(folder, "seisglob2.npz")
-
-    def set_cutaway_tomo(self, on):
-        """Пункт «Томография мантии»: модель из файла профиля, иначе
-        скачивается файл netCDF около 28 МБ, разбор - в рабочем потоке."""
-        QgsSettings().setValue(TOMO_KEY, bool(on))
-        self.panel.cutaway_tomo = bool(on)
-        if on and self.tomo is None and os.path.exists(self._tomo_path()):
-            try:
-                self.tomo = tomography.load(self._tomo_path())
-            except (OSError, ValueError, KeyError) as error:
-                journal.note("tomography file: {}".format(error))
-        if on and self.tomo is None:
-            self._want_tomo()
-        self._show_tomo()
-
-    def _show_tomo(self):
-        on = bool(self.panel.cutaway_tomo) and self.tomo is not None
-        self.view.set_wedge_tomo(self.tomo if on else None)
-        self.cutaway_legend.set_tomo(on)
-        self._place_attribution()
-        self._show_attribution()
-
-    def _want_tomo(self):
-        if self._tomo_reply is not None or self._tomo_job is not None:
-            return
-        self._tomo_reply = fetch_bytes(tomography.URL, self._tomo_arrived)
-        self.view.data_pending += 1
-        self.message = (tr("Загрузка томографии SEISGLOB2, около 28 МБ…"),
-                        time.monotonic())
-        self._show_state()
-
-    def _tomo_arrived(self, data, error):
-        self.view.data_pending = max(0, self.view.data_pending - 1)
-        self._tomo_reply = None
-        if data is None:
-            journal.note("tomography: {}".format(brief_error(error)))
-            self.message = (tr("Томография не загрузилась: {error}",
-                               error=brief_error(error or "")),
-                            time.monotonic())
-            self._show_state()
-            return
-        nc = self._tomo_path() + ".nc"
-        try:
-            with open(nc, "wb") as fh:
-                fh.write(bytes(data))
-        except OSError as problem:
-            journal.note("tomography write: {}".format(problem))
-            return
-        # Первый вызов GDAL - в главном потоке: предупреждение osgeo
-        # о режиме исключений в рабочем потоке роняло бы QGIS.
-        warm_gdal()
-        self._tomo_job = executor("deposits", 1).submit(
-            parse_tomo, nc, self._tomo_path())
-        self.view.data_pending += 1
-        QTimer.singleShot(DEPOSIT_POLL, self._tomo_poll)
-
-    def _tomo_poll(self):
-        job = self._tomo_job
-        if job is None:
-            return
-        if not job.done():
-            QTimer.singleShot(DEPOSIT_POLL, self._tomo_poll)
-            return
-        self._tomo_job = None
-        self.view.data_pending = max(0, self.view.data_pending - 1)
-        try:
-            self.tomo = job.result()
-        except (OSError, ValueError, KeyError, RuntimeError) as error:
-            journal.note("tomography parse: {}".format(error))
-            self.message = (tr("Томография не разобрана."),
-                            time.monotonic())
-            self._show_state()
-            return
-        self._show_tomo()
-
     def _crust_done(self, data, error, saved=False):
         self._crust_reply = None
         self.crust_error = error
@@ -403,22 +248,11 @@ class EarthDataMixin:
             if self.crust is not None and not saved:
                 self._save_crust(data)
         if self.crust is None:
-            # Без модели кора - слой PREM постоянной толщины, причина -
-            # в шкале и журнале. Замечание пользователя от 15 октября
-            # 2026 года - «мощность коры в модели постоянная?».
-            reason = brief_error(self.crust_error or "")
-            self.cutaway_legend.set_missing(reason or tr("нет ответа"))
             journal.note("CRUST1.0 не загружена: {}".format(
                 self.crust_error))
-        else:
-            self.cutaway_legend.set_missing("")
         self._refresh_identified()
-        self.cutaway_legend.set_crust(
-            self.crust is not None,
-            self.crust is not None and self.crust.vp is not None)
-        self._place_attribution()
-        if self.crust is not None and self.view.wedge is not None:
-            self.view.set_wedge(self.view.wedge, self.crust)
+        # Шкала и грани разреза Земли - у исполнителя строки.
+        self._row_hook("crust_changed")
         self._show_attribution()
         self._refresh_section()
         folder = getattr(self, "_crust_export", None)
@@ -530,18 +364,6 @@ class EarthDataMixin:
                 self.slab_index = slabs.read_index(fh.read())
         return self.slab_index
 
-    def _want_slabs(self):
-        """Зоны плит Slab2, которых касается разрез: пришедшие - на
-        грани, недостающие - в запрос. Указатель зон лежит в модуле."""
-        wedge = self.view.wedge
-        if wedge is None:
-            return
-        codes = slabs.touched(self._read_slab_index(),
-                              *cutaway.arc_points(wedge))
-        self._slab_codes = codes
-        self._request_slabs(codes)
-        self._show_slabs()
-
     def _request_slabs(self, codes):
         """Файлы зон плит, которых ещё нет, - в запрос. Ждущие запросы
         входят в счётчик загрузки вида, его показывает значок."""
@@ -572,7 +394,7 @@ class EarthDataMixin:
                 self.slab_zones[code] = slabs.load(data, code)
             except slabs.SlabError as problem:
                 self.slab_errors[code] = str(problem)
-        self._show_slabs()
+        self._row_hook("slabs_changed")
         self._refresh_section()
         self._refresh_identified()
 
@@ -580,17 +402,6 @@ class EarthDataMixin:
         """Окно «Объекты» открыто - место в нём уточняется."""
         if self.identified is not None and self.identified.isVisible():
             self._show_identified()
-
-    def _show_slabs(self):
-        """Пришедшие зоны разреза - на грани, подпись источника и строка
-        шкалы оболочек следом."""
-        codes = self._slab_codes
-        zones = [self.slab_zones[c] for c in codes if c in self.slab_zones] \
-            if self.view.wedge is not None else []
-        self.view.set_wedge_slabs(zones)
-        self.cutaway_legend.set_slabs(bool(zones))
-        self._place_attribution()
-        self._show_attribution()
 
     def _depth_map(self):
         """Глубины на экране очагов: при разрезе Земли - с растяжением

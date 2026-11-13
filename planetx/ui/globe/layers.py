@@ -17,11 +17,9 @@ from qgis.PyQt.QtWidgets import QInputDialog, QMessageBox
 
 from ... import journal
 from ...core import (basemap, fields,
-                     tomography,
                      when, oldmaps,
                      rumsey as rumsey_core,
-                     crust,
-                     slabs, themes, tilemaps)
+                     themes, tilemaps)
 from ...core import sources as datasources
 from ...core import hips, oam, polar
 from ...core.contours import is_imagery as contour_is_imagery
@@ -578,12 +576,6 @@ class LayersMixin:
         for tool in getattr(self, "row_tools", {}).values():
             if hasattr(tool, "credits"):
                 parts += [link_html(*pair) for pair in tool.credits()]
-        if self.view.wedge_slabs:
-            parts.append(link_html(*slabs.ATTRIBUTION))
-        if self.view.wedge is not None and self.crust is not None:
-            parts.append(link_html(*crust.CITATION))
-        if self.view.wedge is not None and self.view.wedge_tomo is not None:
-            parts.append(link_html(*tomography.ATTRIBUTION))
         self._set_credits(parts, kept)
 
     def _set_credits(self, parts, kept):

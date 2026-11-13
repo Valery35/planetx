@@ -12,9 +12,7 @@ import numpy as np
 from qgis.core import QgsSettings
 
 from ...core import (basemap, cadastre, clouds, fields, geology,
-                     cutaway, slabs, themes, tilemaps, wms)
-from ...core.ellipsoid import geodetic_to_ecef
-from ...core.measure import nearest_vertex
+                     slabs, themes, tilemaps, wms)
 from ...core.mipmap import mip_chain
 from ...core.contours import contour_rgba, upsample as contour_upsample
 from ...core.slope import aspect_rgba, slope_aspect, slope_rgba
@@ -27,7 +25,6 @@ from ...i18n import is_russian, tr, ui_language
 from ...net.overlay import BORDERS, PLACES
 from ...core import editing
 from ..handles import CLICK_PIXELS, DrawVertices
-from ..measure import GRAB_PIXELS
 from ..inset import apply as apply_insets
 from ..nasamaps import LAYERS as GALLERY_LAYERS
 from ..registry import ROWS
@@ -80,7 +77,6 @@ ACTIVE_ORDER = tuple(key for key, _ in GALLERY_LAYERS) \
 BODY_CONTOUR_DEEPER = 4
 # Знакомство с модулем при первом открытии - после первых кадров, мс.
 GUIDE_DELAY = 1500
-DEPOSIT_POLL = 300  # мс между проверками разбора месторождений
 # Шахты OSM: пауза после остановки вида перед запросом тайлов, мс,
 # и пауза после отказа Overpass, с. Выбор помощника.
 OSM_PAUSE = 800
@@ -144,10 +140,6 @@ LINES_KEY = "PlanetX/lines/{}"
 # от 27 сентября 2026 года, рельеф включён отдельно.
 DEFAULT_GROUPS = (BORDERS, PLACES)
 RELIEF_KEY = "PlanetX/relief"  # показывать ли рельеф
-# Растягивать ли кору разреза Земли издалека, по умолчанию да.
-STRETCH_KEY = "PlanetX/cutaway_stretch"
-# Раскрашивать ли мантию разреза томографией, по умолчанию нет.
-TOMO_KEY = "PlanetX/cutaway_tomo"
 # Поток по путям (core/pathflow.py): шаг таймера штрихов, мс, подъём
 # штриха над рельефом, м, на сколько пикселей штрих толще линии, на
 # сколько ширин вида от точки взгляда считаются штрихи. Выбор
@@ -156,11 +148,10 @@ FLOW_TICK = 40
 FLOW_LIFT = 20.0
 FLOW_WIDER = 1.5
 FLOW_REACH = 2.0
-# Строки раздела «Слои» и умолчания: разрез Земли выключен, прочие -
-# умолчания строк реестра (default).
-EXTRA_DEFAULTS = {"cutaway": False, **ROWS.defaults()}
+# Строки раздела «Слои» и их умолчания - строки реестра (default).
+EXTRA_DEFAULTS = ROWS.defaults()
 # Строки раздела «Слои», которые есть только у Земли.
-EARTH_EXTRAS = ("cutaway",) + ROWS.earth_keys()
+EARTH_EXTRAS = ROWS.earth_keys()
 # Карты на общем слое вида «emag», на глобусе одна из них: карты
 # значений, Macrostrat, карты картинками, изменения местности и поля.
 EMAG_MAPS = ROWS.view_maps("emag")
@@ -531,59 +522,3 @@ class _RulerVertices(DrawVertices):
         if kind == editing.VERTEX and self._closing(index):
             return tr("Замкнуть фигуру")
         return ""
-
-
-class _WedgeCorners:
-    """Угловые точки разреза Земли, которые тянутся мышью (render/view.py,
-    vertex_tool), просьба автора от 2 октября 2026 года. Угол меняет
-    свою долготу и свою широту сектора (core.cutaway.move_corner)."""
-
-    def __init__(self, window):
-        self.window = window
-        self.index = None
-
-    def points(self):
-        """Углы сектора без повторов: у полюса два угла совпадают."""
-        wedge = self.window.view.wedge
-        if wedge is None:
-            return []
-        out = []
-        for n, (lat, lon) in enumerate(cutaway.corners(wedge)):
-            if abs(lat) >= 90.0 and n in (1, 3):
-                continue
-            out.append((n, lat, lon))
-        return out
-
-    def grab(self, px, py):
-        view = self.window.view
-        points = self.points()
-        if not points:
-            return False
-        # Ручка - там, где нарисован кружок угла: на поверхности, как
-        # подпись (GlobeView.label_height). С эллипсоида в режиме
-        # «Геоид» точка захвата уходила от кружка на сотни километров,
-        # замечание автора от 15 октября 2026 года.
-        xyz = geodetic_to_ecef(np.array([p[1] for p in points]),
-                               np.array([p[2] for p in points]),
-                               np.array([view.label_height(p[1], p[2])
-                                         for p in points]))
-        pixels, front = view.camera.project(xyz)
-        found = nearest_vertex(pixels, front, px, py,
-                               GRAB_PIXELS * view.devicePixelRatioF())
-        self.index = None if found is None else points[found][0]
-        return self.index is not None
-
-    def move(self, px, py):
-        window = self.window
-        found = window._ground(px, py)
-        wedge = window.view.wedge
-        if found is None or self.index is None or wedge is None:
-            return
-        window.view.set_wedge(cutaway.move_corner(wedge, self.index,
-                                                  *found), window.crust)
-        window._update_tool_marks()
-
-    def drop(self):
-        self.index = None
-        # Зоны плит - по новому сектору, когда угол отпущен.
-        self.window._want_slabs()

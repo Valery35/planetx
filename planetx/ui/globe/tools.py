@@ -1148,10 +1148,9 @@ class ToolsMixin:
             marks.append(self._profile_mark)
         if self._section_mark is not None:
             marks.append(self._section_mark)
-        for n, lat, lon in self.wedge_corners.points():
-            # Подпись угла - его широта и долгота, видна, пока его тянут.
-            marks.append(MarkPlace(-420000 - n, "{:.0f}°, {:.0f}°".format(
-                lat, lon), "mark", 1, lat, lon))
+        for tool in getattr(self, "row_tools", {}).values():
+            if hasattr(tool, "tool_marks"):
+                marks += tool.tool_marks()
         self.view.tool_marks = marks
         self.view.update()
 
@@ -1351,9 +1350,13 @@ class ToolsMixin:
         self._refresh_shapes()
         self._tool_cursor()
 
+    def _idle_vertex_tool(self):
+        """Ручки вида, когда окна с ручками закрыты: ручки строки
+        реестра (углы разреза Земли) или никаких."""
+        return self._row_hook("vertex_tool")
+
     def _ruler_closed(self, *args):
-        self.view.vertex_tool = self.wedge_corners \
-            if self.view.wedge is not None else None
+        self.view.vertex_tool = self._idle_vertex_tool()
         if self.handles.tool is self.ruler_vertices:
             self.handles.tool = self.draw_vertices
             self.handles.sync()

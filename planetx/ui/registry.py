@@ -8,16 +8,17 @@
 глобуса (ui/globe) обходят реестр.
 """
 from ..core.rows import Registry
-from . import (aef, buildings, cables, cadastre, clouds, currents, deposits,
-               faults, fieldmap, fires, geoid, geomap, grid, infra, magnetic,
-               miningareas, paleo, plants, platemotion, plates, quakes,
-               satellites, sky, sun, surface, temperature, tilemaps,
+from . import (aef, buildings, cables, cadastre, clouds, currents, cutaway,
+               deposits, faults, fieldmap, fires, geoid, geomap, grid, infra,
+               magnetic, miningareas, paleo, plants, platemotion, plates,
+               quakes, satellites, sky, sun, surface, temperature, tilemaps,
                tileoverlays, transport, valuemaps, volcanoes, wiki)
 
 ROWS = Registry().add(
     *sky.ROWS,
     *sun.ROWS,
     *satellites.ROWS,
+    *cutaway.ROWS,
     *paleo.ROWS,
     *geoid.ROWS,
     *currents.ROWS,

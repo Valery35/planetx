@@ -69,8 +69,7 @@ class ActionsMixin:
         self._tool_cursor()
 
     def _place_closed(self, *args):
-        self.view.vertex_tool = self.wedge_corners \
-            if self.view.wedge is not None else None
+        self.view.vertex_tool = self._idle_vertex_tool()
         self.drawer.clear()
         self._refresh_shapes()
         self._tool_cursor()

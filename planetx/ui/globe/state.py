@@ -300,14 +300,12 @@ class StateMixin:
 
     def _apply_extra(self, key, on):
         if key in EARTH_EXTRAS and not self.planet.earth:
-            # Облака, температура, здания и солнце - земные. Флажок
-            # помнится и действует после возврата на Землю.
+            # Земные строки (облака, температура, здания, солнце, разрез
+            # Земли). Флажок помнится и действует после возврата на Землю.
             on = False
         row = ROWS.get(key)
         if row is not None:
             self._turn_row(row, on)
-        elif key == "cutaway":
-            self._set_cutaway(on)
 
     # Раздел «На глобусе»: включённые слои, непрозрачность, выгрузка.
 

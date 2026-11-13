@@ -150,7 +150,6 @@ class BodyMixin:
         for tool in self.row_tools.values():
             if hasattr(tool, "legend"):
                 tool.legend.hide()
-        self.cutaway_legend.hide()
         self.theme_legend.hide()
         self.view.plain_base = False
         for button in self._globe_buttons():
@@ -236,8 +235,6 @@ class BodyMixin:
         for tool in self.row_tools.values():
             if hasattr(tool, "sync_legend"):
                 tool.sync_legend()
-        self.cutaway_legend.setVisible(bool(self.extras.get("cutaway"))
-                                       and self.planet.earth)
         self._update_timebar()
         self._show_theme()
         self._set_surface()

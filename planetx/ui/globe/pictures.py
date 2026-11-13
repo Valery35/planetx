@@ -700,8 +700,7 @@ class PicturesMixin:
         if getattr(tool, "dialog", None) is dialog:
             self.handles.tool = self.draw_vertices
             if self.view.vertex_tool is tool:
-                self.view.vertex_tool = self.wedge_corners \
-                    if self.view.wedge is not None else None
+                self.view.vertex_tool = self._idle_vertex_tool()
             self.handles.sync()
 
     def copy_places(self, keys):

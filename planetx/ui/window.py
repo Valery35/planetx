@@ -46,7 +46,7 @@ from . import guide as guide_ui
 from . import style
 from .sidepanel import SidePanel
 from .layer_labels import LayerLabels
-from .legend import (BedsLegend, CutawayLegend,
+from .legend import (BedsLegend,
                      FireLegend, InsolationLegend, LegendPanel, QuakeLegend,
                      SlopeLegend, ThemeLegend,
                      ClassLegend, FieldLegend,
@@ -109,7 +109,7 @@ from .globe.base import (ACCEPTED_KEY, ATTRIBUTION_STYLE, AUTO_DEFAULT,
                          SIDEBAR_KEY,
                          SWITCH_INTERVAL, SYNC_KEY, TERRAIN_MIRRORS,
                          THEME_DELAY, THEME_KEY, VIEWSHED_POLL, _RulerVertices,
-                         _WedgeCorners, all_sources)
+                         all_sources)
 from .globe.state import StateMixin
 from .globe.themes import ThemesMixin
 from .globe.earthdata import EarthDataMixin
@@ -250,8 +250,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.quake_legend.hide()
         self.fire_legend = FireLegend(self.view)
         self.fire_legend.hide()
-        self.cutaway_legend = CutawayLegend(self.view)
-        self.cutaway_legend.hide()
         # Тема NASA GIBS: выбранная тема и показанный день, ряды дат
         # и шкалы слоёв по ключу темы, ждущие ответы.
         self.theme_key = ""
@@ -264,12 +262,12 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # Крестик на шкале карты витрины убирает карту.
         for legend in (self.theme_legend, self.fire_legend):
             legend.closer = lambda: self.set_theme("")
-        # Шкалы - одной панелью, сверху вниз: тема, пласты, оболочки
-        # разреза, очаги, пожары, инсоляция, уклон. Шкалы строк реестра
-        # исполнители добавляют сами.
+        # Шкалы - одной панелью, сверху вниз: тема, пласты, очаги,
+        # пожары, инсоляция, уклон. Шкалы строк реестра исполнители
+        # добавляют сами, оболочки разреза Земли - перед очагами.
         self.legend_panel = LegendPanel(self.view)
         for legend in (self.theme_legend, self.beds_legend,
-                       self.cutaway_legend, self.quake_legend,
+                       self.quake_legend,
                        self.fire_legend,
                        self.insolation_legend,
                        self.slope_legend):
@@ -351,13 +349,11 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self._slab_replies = {}
         self.slab_errors = {}
         self.slab_base = None
-        self._slab_codes = []
         # Разрез Земли: модель коры CRUST1.0, её запрос и ошибка.
         self.crust = None
         self._crust_reply = None
         self.crust_error = ""
         self.view.installEventFilter(self)
-        self.view.wedge_gain_changed.connect(self._wedge_gain_changed)
         splitter = QSplitter(self)
         self.splitter = splitter
         splitter.addWidget(self.panel)
@@ -582,8 +578,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # Запросы поиска, которые запустил помощник (fly, assistant=False).
         self._tool_queries = set()
         self._section_points = []
-        # Углы разреза Земли, которые тянутся мышью.
-        self.wedge_corners = _WedgeCorners(self)
         self._section_mark = None
         # Видимость из точки: окно, задание расчёта и тайлы слоя.
         self.viewshed_dialog = None
@@ -834,14 +828,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         geoid_tool = self.row_tool("geoid")
         self.panel.geoid_scale = geoid_tool.scale()
         self.panel.geoid_scale_changed.connect(geoid_tool.set_scale)
-        self.panel.cutaway_stretch = self.cutaway_stretch()
-        self.view.wedge_stretch = self.panel.cutaway_stretch
-        self.panel.cutaway_stretch_changed.connect(self.set_cutaway_stretch)
-        self.tomo = None
-        self._tomo_reply = None
-        self._tomo_job = None
-        self.panel.cutaway_tomo = self.cutaway_tomo()
-        self.panel.cutaway_tomo_changed.connect(self.set_cutaway_tomo)
         self._crust_export = None
         self.panel.crust_export.connect(self.crust_to_project)
         self._opacity_overlay = QTimer(self)

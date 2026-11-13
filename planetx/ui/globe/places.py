@@ -519,7 +519,7 @@ class PlacesMixin:
                 self._active_opacity(key, value)
         wedge = layers.get(lookat.WEDGE)
         if wedge and self.extras.get("cutaway"):
-            self.set_wedge_box(*wedge)
+            self.row_tool("cutaway").set_box(*wedge)
         ground = layers.get(lookat.GROUND)
         sub = self.subsurface
         if ground and sub.model is not None:

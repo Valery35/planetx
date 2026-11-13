@@ -16964,13 +16964,13 @@ def cutaway_wait():
     out["crust_s"] = round(time.monotonic() - out["started"], 1)
     out["crust_error"] = window.crust_error
     out["crust"] = window.crust is not None
-    out["legend_crust"] = window.cutaway_legend.crust
+    out["legend_crust"] = window.row_tool("cutaway").legend.crust
     out["credit"] = "CRUST1.0" in window.attribution.text()
-    out["slab_codes"] = list(window._slab_codes)
+    out["slab_codes"] = list(window.row_tool("cutaway").slab_codes)
     out["slab_loaded"] = sorted(window.slab_zones)
     out["slab_errors"] = dict(window.slab_errors)
     out["slab_credit"] = "Slab2" in window.attribution.text()
-    out["legend_slabs"] = window.cutaway_legend.slabs
+    out["legend_slabs"] = window.row_tool("cutaway").legend.slabs
     out["pending_after"] = window.view.data_pending
 
 
@@ -16981,7 +16981,7 @@ def cutaway_check():
     out = result["cutaway"]
     image = view.grabFramebuffer()
     image.save(os.path.join(TEMP, "planetx_cutaway.png"))
-    out["legend"] = window.cutaway_legend.isVisible()
+    out["legend"] = window.row_tool("cutaway").legend.isVisible()
     window.grab().save(os.path.join(TEMP, "planetx_cutaway_window.png"))
     out["faces_drawn"] = view.cutaway.drawn
     # На своей глубине - только очаги в вынутом секторе.
@@ -16995,7 +16995,7 @@ def cutaway_check():
     # западнее, через пиксели экрана.
     import numpy as np
     from planetx.core.ellipsoid import geodetic_to_ecef
-    corners = window.wedge_corners
+    corners = window.row_tool("cutaway").corners
     out["corner_tool"] = view.vertex_tool is corners
     out["corner_marks"] = sum(1 for m in view.tool_marks
                               if -420004 < m.id <= -420000)
@@ -17016,7 +17016,7 @@ def cutaway_check():
     view.grabFramebuffer().save(os.path.join(TEMP,
                                              "planetx_cutaway_moved.png"))
     out["gl_drag"] = dict(view.gl_errors)
-    out["legend_gain"] = window.cutaway_legend.gain
+    out["legend_gain"] = window.row_tool("cutaway").legend.gain
     out["gl"] = dict(view.gl_errors)
     # Ближе: западная грань у Японского жёлоба, взгляд на запад
     # из вынутого сектора, 400 км.
@@ -25886,7 +25886,7 @@ def geoid_cutaway_check():
     # До правки точка захвата была на эллипсоиде, в пикселях - shift.
     import numpy as np
     from planetx.core.ellipsoid import geodetic_to_ecef
-    corners = window.wedge_corners
+    corners = window.row_tool("cutaway").corners
     _, lat, lon = corners.points()[0]
     mark = geodetic_to_ecef(np.array([lat]), np.array([lon]),
                             np.array([view.label_height(lat, lon)]))
@@ -26345,7 +26345,7 @@ def slab_grazing():
     window = state["window"]
     window.set_body("earth")
     window.set_extra("cutaway", True)
-    window.set_wedge_box(95.0, 185.0, 0.0, 60.0)
+    window.row_tool("cutaway").set_box(95.0, 185.0, 0.0, 60.0)
     window.view.navigator.show(Pose(4.0, 100.0, 2500000.0, 0.0, 50.0))
     state["slab_started"] = time.monotonic()
 
@@ -26359,7 +26359,7 @@ def slab_grazing_check():
         return 1000
     out = result.setdefault("slab_grazing", {})
     out["slabs"] = len(view.wedge_slabs or [])
-    out["codes"] = list(getattr(window, "_slab_codes", []) or [])
+    out["codes"] = list(window.row_tool("cutaway").slab_codes)
     for tilt in (40.0, 55.0, 70.0):
         from planetx.core.navigation import Pose
         view.navigator.show(Pose(4.0, 100.0, 2500000.0, 0.0, tilt))
@@ -26608,7 +26608,7 @@ def stop_state():
     out = result["stop_state"] = {}
     window.set_extra("quakes", False)
     window.set_extra("cutaway", True)
-    window.set_wedge_box(120.0, 160.0, 0.0, 38.5)
+    window.row_tool("cutaway").set_box(120.0, 160.0, 0.0, 38.5)
     snap = window.view_state()
     snap["quakes"] = True
     snap[lookat.OPACITY] = dict(snap.get(lookat.OPACITY) or {},
@@ -26621,7 +26621,7 @@ def stop_state():
     out["stored"] = {k: layers.get(k) for k in (lookat.WEDGE,
                                                 lookat.OPACITY)}
     # Другой сектор, потом вид метки возвращает свой.
-    window.set_wedge_box(0.0, 90.0, 0.0, 45.0)
+    window.row_tool("cutaway").set_box(0.0, 90.0, 0.0, 45.0)
     window._apply_view_layers(layers)
     wedge = window.view.wedge
     out["wedge_back"] = [round(v, 3) for v in wedge] if wedge else None
@@ -28757,7 +28757,7 @@ def post_geoid():
     window.view.navigator.show(Pose(5.0, 90.0, 17000000.0, 20.0, 25.0))
     window.set_extra("geoid", True)
     window.set_extra("cutaway", True)
-    window.set_wedge_box(60.0, 120.0, 0.0, 60.0)
+    window.row_tool("cutaway").set_box(60.0, 120.0, 0.0, 60.0)
     state["ls_started"] = time.monotonic()
 
 
@@ -30199,9 +30199,9 @@ def crust_types_on():
     window = state["window"]
     nav = window.view.navigator
     nav.stop()
-    window.set_cutaway_stretch(True)
+    window.row_tool("cutaway").set_stretch(True)
     window.set_extra("cutaway", True)
-    window.set_wedge_box(-40.0, 20.0, 0.0, 50.0)
+    window.row_tool("cutaway").set_box(-40.0, 20.0, 0.0, 50.0)
     window.set_extra("quakes", True)
     nav.set_pose(Pose(30.0, -5.0, 12000000.0, 330.0, 30.0))
     result["crust_types"] = {"started": time.monotonic()}
@@ -30219,7 +30219,7 @@ def crust_types_check():
         return 1000
     out["crust"] = window.crust is not None
     out["vp"] = window.crust is not None and window.crust.vp is not None
-    legend = window.cutaway_legend
+    legend = window.row_tool("cutaway").legend
     out["legend_oceanic"] = legend.oceanic
     out["legend_rows"] = [text for text, _ in legend.rows]
     mesh = cutaway.faces(view.wedge, crust=window.crust,
@@ -30239,13 +30239,13 @@ def crust_types_check():
     window.panel.cutaway_stretch_changed.emit(False)
     out["gain_true_scale"] = view.wedge_gain
     out["legend_gain_true_scale"] = legend.gain
-    out["setting_off"] = window.cutaway_stretch()
+    out["setting_off"] = window.row_tool("cutaway").stretch()
     out["panel_off"] = window.panel.cutaway_stretch
     view.grabFramebuffer().save(os.path.join(TEMP,
                                              "planetx_crust_true_scale.png"))
     window.panel.cutaway_stretch_changed.emit(True)
     out["gain_back"] = view.wedge_gain
-    out["setting_on"] = window.cutaway_stretch()
+    out["setting_on"] = window.row_tool("cutaway").stretch()
     # Модель не пришла: строка с причиной в шкале, потом снова модель.
     model = window.crust
     window.crust = None
@@ -30453,11 +30453,12 @@ def tomo_on():
     nav = window.view.navigator
     nav.stop()
     window.set_extra("cutaway", True)
-    window.set_wedge_box(140.0, 230.0, 0.0, 60.0)
+    window.row_tool("cutaway").set_box(140.0, 230.0, 0.0, 60.0)
     window.panel.cutaway_tomo_changed.emit(True)
     nav.set_pose(Pose(20.0, 175.0, 15000000.0, 330.0, 25.0))
-    result["tomo"] = {"started": time.monotonic(),
-                      "from_file": window.tomo is not None}
+    result["tomo"] = {
+        "started": time.monotonic(),
+        "from_file": window.row_tool("cutaway").tomo is not None}
 
 
 @check(2000)
@@ -30466,29 +30467,30 @@ def tomo_check():
     from planetx.core import cutaway, tomography
     window = state["window"]
     view = window.view
+    tool = window.row_tool("cutaway")
     out = result["tomo"]
-    if window.tomo is None and (window._tomo_reply is not None
-                                or window._tomo_job is not None) \
+    if tool.tomo is None and (tool.tomo_reply is not None
+                              or tool.tomo_job is not None) \
             and time.monotonic() - out["started"] < 180.0:
         return 2000
     out["seconds"] = round(time.monotonic() - out["started"], 1)
-    out["loaded"] = window.tomo is not None
+    out["loaded"] = tool.tomo is not None
     out["view_tomo"] = view.wedge_tomo is not None
-    out["legend_tomo"] = window.cutaway_legend.tomo
-    out["legend_rows"] = [t for t, _ in window.cutaway_legend.rows][:6]
+    out["legend_tomo"] = tool.legend.tomo
+    out["legend_rows"] = [t for t, _ in tool.legend.rows][:6]
     out["credit"] = "SEISGLOB2" in window.attribution.text()
-    if window.tomo is not None:
+    if tool.tomo is not None:
         mesh = cutaway.faces(view.wedge, crust=window.crust,
-                             gain=view.wedge_gain, tomo=window.tomo)
+                             gain=view.wedge_gain, tomo=tool.tomo)
         rgb = mesh.vertices["color"][:, :3].astype(int)
         red = np.all(rgb == np.array(tomography.STOPS[0][1]), axis=1)
         out["vertices"] = int(len(rgb))
         out["slowest"] = int(red.sum())
         out["japan_slab_500"] = round(float(tomography.sample(
-            window.tomo, [37.0], [133.0], 500.0)[0]), 2)
+            tool.tomo, [37.0], [133.0], 500.0)[0]), 2)
     view.grabFramebuffer().save(os.path.join(TEMP, "planetx_tomo.png"))
     window.panel.cutaway_tomo_changed.emit(False)
-    out["off"] = view.wedge_tomo is None and not window.cutaway_legend.tomo
+    out["off"] = view.wedge_tomo is None and not tool.legend.tomo
     window.set_extra("cutaway", False)
     out["gl"] = dict(view.gl_errors)
     return None

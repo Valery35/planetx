@@ -208,7 +208,7 @@ def apply(window, scene, kml=b""):
     wedge = view.get("wedge")
     if isinstance(wedge, list) and len(wedge) == 4 \
             and all(isinstance(v, (int, float)) for v in wedge):
-        window.set_wedge_box(*wedge)
+        window.row_tool("cutaway").set_box(*wedge)
     wanted, reliefs, missing = set(), [], []
     for entry in scene.layers:
         layer = _find_layer(entry) or _add_layer(entry)
