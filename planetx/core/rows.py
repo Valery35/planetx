@@ -79,6 +79,8 @@ class Row:
         self.flow = flow
         # Строка есть у тел с высотами (уклон, горизонтали), а не у всех.
         self.relief = bool(relief)
+
+
 class Registry:
     """Строки по порядку регистрации."""
 

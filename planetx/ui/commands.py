@@ -33,7 +33,6 @@ WORDS = {
     "cutaway": ("разрез земли", "недра", "ядро", "мантия", "кора",
                 "cutaway", "core", "mantle"),
     "buildings": ("здания", "дома", "3d", "buildings"),
-    "temperature": ("температура", "жара", "temperature"),
     "weather_aurora": ("сияние", "северное сияние", "аврора",
                        "aurora", "northern lights", "ovation"),
 }

@@ -48,7 +48,7 @@ from .sidepanel import SidePanel
 from .layer_labels import LayerLabels
 from .legend import (BedsLegend, CutawayLegend,
                      FireLegend, InsolationLegend, LegendPanel, QuakeLegend,
-                     SlopeLegend, TemperatureLegend, ThemeLegend,
+                     SlopeLegend, ThemeLegend,
                      ClassLegend, FieldLegend,
                      PointCloudLegend, SiteLegend)
 from .overlays import GroundLayers, ScreenOverlays
@@ -240,9 +240,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.brand.setToolTip(tr("О модуле"))
         self.brand.clicked.connect(
             lambda _=False: QTimer.singleShot(0, lambda: show_about(self)))
-        # Шкала температуры, видна вместе со строкой «Температура».
-        self.legend = TemperatureLegend(self.view)
-        self.legend.hide()
         self.slope_legend = SlopeLegend(self.view)
         self.slope_legend.hide()
         # Пласты подземной модели.
@@ -265,16 +262,17 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self._theme_replies = {}
         self.theme_legend = ThemeLegend(self.view)
         # Крестик на шкале карты витрины убирает карту.
-        for legend in (self.theme_legend, self.fire_legend, self.legend):
+        for legend in (self.theme_legend, self.fire_legend):
             legend.closer = lambda: self.set_theme("")
         # Шкалы - одной панелью, сверху вниз: тема, пласты, оболочки
-        # разреза, очаги, пожары, инсоляция, уклон, температура.
+        # разреза, очаги, пожары, инсоляция, уклон. Шкалы строк реестра
+        # исполнители добавляют сами.
         self.legend_panel = LegendPanel(self.view)
         for legend in (self.theme_legend, self.beds_legend,
                        self.cutaway_legend, self.quake_legend,
                        self.fire_legend,
                        self.insolation_legend,
-                       self.slope_legend, self.legend):
+                       self.slope_legend):
             self.legend_panel.add(legend)
         self.legend_panel.changed = self._place_attribution
         # День темы - правый бегунок шкалы времени, смена дня - после

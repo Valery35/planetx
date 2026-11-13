@@ -24738,7 +24738,7 @@ def temperature_wait():
     result["temperature"] = {
         "sea": _gibs_report(window, "sea"),
         "land": _gibs_report(window, "land"),
-        "legend": window.legend.isVisible(),
+        "legend": window.row_tool("temperature").legend.isVisible(),
         "attribution": "NASA GIBS" in window.attribution.text()}
     window.set_extra("temperature", False)
     view.update()
@@ -24751,7 +24751,7 @@ def temperature_off():
     out = result["temperature"]
     out["off_textures"] = sum(len(view.gibs[n].textures)
                               for n in ("sea", "land"))
-    out["off_legend"] = window.legend.isVisible()
+    out["off_legend"] = window.row_tool("temperature").legend.isVisible()
     out["off_loaders"] = sorted(window.gibs_loaders)
     out["gl_errors"] = dict(view.gl_errors)
 

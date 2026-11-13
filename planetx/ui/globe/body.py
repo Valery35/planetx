@@ -145,7 +145,6 @@ class BodyMixin:
         view.sky_time = self.sky_moment()
         self.toolbar.set_body("sky")
         self.navpad.hide()
-        self.legend.hide()
         self.slope_legend.hide()
         self.insolation_legend.hide()
         for tool in self.row_tools.values():
@@ -232,8 +231,6 @@ class BodyMixin:
             button.setEnabled(True)
         self.toolbar.sync.setEnabled(self.planet.earth)
         self.toolbar.identify.setEnabled(self.planet.earth)
-        self.legend.setVisible(bool(self.extras.get("temperature"))
-                               and self.planet.earth)
         self.insolation_legend.setVisible(
             self.insolation_result is not None)
         for tool in self.row_tools.values():

@@ -18,8 +18,7 @@ from qgis.utils import iface
 
 from ... import journal
 from ...core import wms
-from ...core import (basemap, geology, temperature,
-                     quakes, themes, tilemaps)
+from ...core import (basemap, geology, quakes, themes, tilemaps)
 from ...core.sync import ground_size, view_box, inside as in_box
 from ...i18n import is_russian, tr
 from ...net.overlay import VECTOR_GROUPS, fetch_bytes
@@ -307,14 +306,6 @@ class StateMixin:
         row = ROWS.get(key)
         if row is not None:
             self._turn_row(row, on)
-        elif key == "temperature":
-            if on and (self.theme_key or self.extras.get("fires")):
-                self.set_theme("temperature")
-            self._mark_gallery()
-            self._set_gibs("sea", on)
-            self._set_gibs("land", on)
-            self.legend.setVisible(on)
-            self._place_attribution()
         elif key == "buildings":
             self._set_buildings(on)
         elif key == "sun":
@@ -534,9 +525,7 @@ class StateMixin:
         elif hasattr(tool, "export_jobs"):
             jobs = tool.export_jobs(path)
         else:
-            stem = os.path.splitext(path)[0]
-            jobs = [(temperature.SEA, None, stem + "_sea.tif"),
-                    (temperature.LAND, None, stem + "_land.tif")]
+            return None
         self._picture_jobs = getattr(self, "_picture_jobs", [])
         for layer, day, out in jobs:
             url, _, _ = themes.wms_url(layer, box, day)

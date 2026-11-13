@@ -12,8 +12,7 @@ import numpy as np
 from qgis.core import QgsSettings
 
 from ...core import (basemap, cadastre, clouds, fields, geology, sun,
-                     temperature, cutaway, slabs, themes, tilemaps,
-                     wms)
+                     cutaway, slabs, themes, tilemaps, wms)
 from ...core.ellipsoid import geodetic_to_ecef
 from ...core.measure import nearest_vertex
 from ...core.mipmap import mip_chain
@@ -54,12 +53,11 @@ TERRAIN_MIRRORS = Mirrors(slabs.TERRAIN_REPOS)
 POINT_LAYERS = dict(ROWS.points())
 # Струйки: ключ строки - поле вида.
 FLOW_LAYERS = dict(ROWS.flows())
-GIBS_FADES = {"temperature": ("sea", "land"), "map": ("theme", "compare"),
-              **ROWS.fades()}
+GIBS_FADES = {"map": ("theme", "compare"), **ROWS.fades()}
 QGIS_LAYERS = ROWS.qgis_keys()
 # Раскраски: в проект - сеткой значений или картинкой WMS GIBS. Строки
 # реестра дают свою выгрузку крючком export_picture.
-PICTURE_LAYERS = ("map", "temperature")
+PICTURE_LAYERS = ("map",)
 OPACITY_KEY = "PlanetX/opacity/"
 # Строки слоёв остановки тура и вида метки проявляются и гаснут за
 # столько секунд, шаг таймера - мс. Выбор помощника, утверждает автор.
@@ -73,8 +71,8 @@ SECTION_TIME_PAUSE = 400
 # Выбор помощника, утверждает автор.
 WAYBACK_PAUSE = 700
 # Порядок строк «На глобусе»: слои витрины, слои «Карты», карты витрины.
-ACTIVE_ORDER = tuple(key for key, _ in GALLERY_LAYERS) + (
-    "buildings", "fires", "temperature")
+ACTIVE_ORDER = tuple(key for key, _ in GALLERY_LAYERS) + ("buildings",) \
+    + tuple(row.key for row in ROWS.rows if not row.catalog)
 # Каталог «Добавить данные» в левой панели: панель не уже, пиксели.
 # Горизонтали тел - на столько уровней глубже уровня высот тела, по
 # пересчитанному предку. У Марса пиксель уровня 5 около 2.6 км, уровня
@@ -165,12 +163,12 @@ FLOW_REACH = 2.0
 # 29 сентября 2026 года, его утверждает автор. 3D-здания выключены,
 # решение автора от 29 сентября 2026 года.
 # Солнце выключено, умолчание плана работ после 0.16.0.
-EXTRA_DEFAULTS = {"temperature": False, "buildings": False, "sun": False,
+EXTRA_DEFAULTS = {"buildings": False, "sun": False,
                   "cutaway": False,
                   **ROWS.defaults(),
                   }
 # Строки раздела «Слои», которые есть только у Земли.
-EARTH_EXTRAS = ("temperature", "buildings", "sun",
+EARTH_EXTRAS = ("buildings", "sun",
                 "cutaway") \
     + ROWS.earth_keys()
 # Карты на общем слое вида «emag», на глобусе одна из них: карты
@@ -311,12 +309,6 @@ def contours_prepare(floor, radius, insets=(), encoding="terrarium",
     return prepare
 
 
-def prepare_temperature(key, rgba):
-    """Работа рабочего потока для тайла температуры: раскраска GIBS
-    с непрозрачностью и уровни мипмапов."""
-    return mip_chain(temperature.overlay_rgba(rgba))
-
-
 def prepare_theme(theme_key):
     """Работа рабочего потока для тайла темы NASA GIBS: прозрачность,
     прозрачные классы темы и уровни мипмапов."""
@@ -419,10 +411,7 @@ def gibs_source(name):
         return (basemap.Source("NASA GIBS", clouds.url_template(
             time.time()), clouds.MAX_LEVEL, clouds.ATTRIBUTION,
             builtin=True), prepare_clouds)
-    layer = temperature.SEA if name == "sea" else temperature.LAND
-    return (basemap.Source("NASA GIBS", temperature.url_template(layer),
-                           temperature.MAX_LEVEL, temperature.ATTRIBUTION,
-                           builtin=True), prepare_temperature)
+    raise KeyError(name)
 
 
 def xyz_sources():
