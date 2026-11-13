@@ -54,9 +54,7 @@ TERRAIN_MIRRORS = Mirrors(slabs.TERRAIN_REPOS)
 POINT_LAYERS = dict(ROWS.points())
 # Струйки: ключ строки - поле вида.
 FLOW_LAYERS = dict(ROWS.flows())
-GIBS_FADES = {"slope": ("slope",),
-              "aspect": ("slope",), "contours": ("contours",),
-              "temperature": ("sea", "land"), "map": ("theme", "compare"),
+GIBS_FADES = {"temperature": ("sea", "land"), "map": ("theme", "compare"),
               **ROWS.fades()}
 QGIS_LAYERS = ROWS.qgis_keys()
 # Раскраски: в проект - сеткой значений или картинкой WMS GIBS. Строки
@@ -76,7 +74,7 @@ SECTION_TIME_PAUSE = 400
 WAYBACK_PAUSE = 700
 # Порядок строк «На глобусе»: слои витрины, слои «Карты», карты витрины.
 ACTIVE_ORDER = tuple(key for key, _ in GALLERY_LAYERS) + (
-    "buildings", "contours", "fires", "temperature")
+    "buildings", "fires", "temperature")
 # Каталог «Добавить данные» в левой панели: панель не уже, пиксели.
 # Горизонтали тел - на столько уровней глубже уровня высот тела, по
 # пересчитанному предку. У Марса пиксель уровня 5 около 2.6 км, уровня
@@ -168,12 +166,9 @@ FLOW_REACH = 2.0
 # решение автора от 29 сентября 2026 года.
 # Солнце выключено, умолчание плана работ после 0.16.0.
 EXTRA_DEFAULTS = {"temperature": False, "buildings": False, "sun": False,
-                  "slope": False, "aspect": False, "contours": False,
                   "cutaway": False,
                   **ROWS.defaults(),
                   }
-# Уклон и экспозиция - один слой вида, включена одна из двух строк.
-SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
 EARTH_EXTRAS = ("temperature", "buildings", "sun",
                 "cutaway") \

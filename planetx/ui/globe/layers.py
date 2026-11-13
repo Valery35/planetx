@@ -164,10 +164,9 @@ class LayersMixin:
         self.source = source
         self._start_loader()
         self.view.change_source(source.max_level, coarse=coarse)
-        if self.extras.get("contours") \
-                and self._palette_for(source) != self._contour_palette:
-            # Подложка сменилась со снимка на карту или обратно.
-            self._set_contours(self._surface_source())
+        for tool in self.row_tools.values():
+            if hasattr(tool, "basemap_changed"):
+                tool.basemap_changed(source)  # цвета горизонталей
         # Уровни 0-2 просятся сразу. Вид не рисует кадр, пока их нет,
         # и сам их не попросит. Без этого смена подложки до прихода
         # уровней 0-2 оставляла окно пустым, нашлось 26 сентября 2026.

@@ -12,14 +12,10 @@ from qgis.core import QgsSettings
 from qgis.PyQt.QtCore import QTimer
 
 from ... import journal
-from ...core import (basemap, ellipsoid, events, sun,
+from ...core import (basemap, events, sun,
                      themes, wayback, sources as datasources)
 from ...core.geocode import link_zoom
 from ...core.sync import ground_size
-from ...core.contours import (LEVEL as CONTOUR_LEVEL,
-                              SOURCE_LEVEL as CONTOUR_SOURCE,
-                              is_imagery as contour_is_imagery,
-                              view_step as contour_view_step)
 from ...core.terrain import MAX_LEVEL as TERRAIN_MAX
 from ...i18n import tr
 from ...net.loader import TileLoader
@@ -32,14 +28,12 @@ from ..themes import theme_names
 from ..project import (SIDE_SWIPE, set_visible_on_map, write_flag,
                        write_shown)
 from ..inset import DeepSource, DemSource, terrain_prepare
-from ..contours import ContourSource, digit_glyphs
 from ..properties import SCALE_RANGE
 from ..nasamaps import NasaMaps, map_names
 from ..overture import OvertureTiles, release_url
-from .base import (BODY_CONTOUR_DEEPER, RELIEF_KEY, SCALE_KEY, SUN_PERIOD,
-                   SURFACE_EXTRAS, THEME_KEY, TILE_SIZE, WAYBACK_PAUSE,
-                   buildings_decoder,
-                   contours_prepare, gibs_source, prepare_theme, slope_prepare)
+from .base import (RELIEF_KEY, SCALE_KEY, SUN_PERIOD,
+                   THEME_KEY, TILE_SIZE, WAYBACK_PAUSE,
+                   buildings_decoder, gibs_source, prepare_theme)
 
 
 class ThemesMixin:
@@ -796,7 +790,7 @@ class ThemesMixin:
         self.view.update()
 
     def _surface_source(self):
-        """Тайлы высот тела для уклона: (источник, пол высот) или None,
+        """Тайлы высот тела: (источник, пол высот, врезки) или None,
         если высот у тела нет."""
         if self.planet.earth:
             return basemap.Source("Terrarium", self._terrain_choice()[0],
@@ -808,99 +802,12 @@ class ThemesMixin:
         return basemap.Source(name, url, level, builtin=True), None, ()
 
     def _set_surface(self):
-        """Слой уклона или экспозиции по строкам раздела «Слои» и телу.
-        Тайлы высот берутся через кэш QGIS, слой считается из них
-        в рабочем потоке (core/slope.py)."""
-        mode = next((k for k in SURFACE_EXTRAS if self.extras.get(k)),
-                    None)
-        found = self._surface_source()
-        self._set_contours(found)
-        # Тот же слой вида занимает квадрат окна «Уклон и экспозиция»
-        # (ui/relief.py): включённая строка его снимает, без строки он
-        # возвращается.
-        local = getattr(self, "relief", None)
-        if mode is not None and local is not None:
-            local.clear(quiet=True)
-        if mode is None or found is None or self.view.sky_view is not None:
-            self._set_gibs("slope", False)
-            self.slope_legend.hide()
-            if local is not None:
-                local.show()
-            return
-        source, floor, insets = found
-        self.view.gibs["slope"].max_level = source.max_level
-        encoding = self._terrain_choice()[1] if self.planet.earth \
-            else "terrarium"
-        self._set_gibs("slope", True, (source, slope_prepare(
-            mode, floor, ellipsoid.A, insets, encoding)), cache=True)
-        self.slope_legend.set_mode(mode)
-        self.slope_legend.show()
-        self._place_attribution()
-
-    def _set_contours(self, found):
-        """Слой горизонталей по строке «Горизонтали» и телу, независимо
-        от уклона. found - источник высот тела, как у уклона."""
-        if not self.extras.get("contours") or found is None \
-                or self.view.sky_view is not None:
-            self._set_gibs("contours", False)
-            self.contour_legend.hide()
-            return
-        # Жёлтые линии на снимке, коричневые на карте.
-        self._contour_palette = self._palette_for(self.source)
-        self.contour_legend.export = \
-            self.contour_export.view_contours if self.planet.earth else None
-        self.contour_legend.show()
-        self._update_contour_legend()
-        source, floor, insets = found
-        levels = None
-        if self.planet.earth:
-            # Глубже уровня съёмки - по предку (ContourSource, upsample),
-            # в открытом море - по уровню глубин. Свой источник высот
-            # бывает подробнее, у него - уровень 15.
-            land = CONTOUR_SOURCE if source.url == datasources.TERRAIN_URL \
-                else TERRAIN_MAX
-            source = ContourSource(source.url, self.view.store, land)
-            levels = source.level_of
-            deepest = CONTOUR_LEVEL
-        else:
-            # У тел высоты только до уровня тела (5). Глубже тайл
-            # горизонталей - предок, сглаженный и пересчитанный
-            # кубически, как на Земле глубже уровня съёмки. Иначе вблизи
-            # линии растягивались вместе с тайлом уровня 5. Просьба
-            # автора от 11 октября 2026 года.
-            top = source.max_level
-            source = DeepSource(source.name, source.url, top,
-                                source.attribution, missing=source.missing)
-
-            def levels(key, top=top):
-                return min(key[0], top)
-            deepest = min(CONTOUR_LEVEL, top + BODY_CONTOUR_DEEPER)
-        self.view.gibs["contours"].max_level = deepest
-        encoding = self._terrain_choice()[1] if self.planet.earth \
-            else "terrarium"
-        self._set_gibs("contours", True, (source, contours_prepare(
-            floor, ellipsoid.A, insets, encoding, digit_glyphs(), levels,
-            self._contour_palette, self.view.store,
-            sea=self.planet.earth)), cache=True)
-
-    def _palette_for(self, source):
-        """Цвета горизонталей по подложке: imagery - снимок, map -
-        карта (core.contours.is_imagery)."""
-        imagery = contour_is_imagery(source.name, source.url,
-                                     builtin_body=not self.planet.earth)
-        return "imagery" if imagery else "map"
-
-    def _update_contour_legend(self):
-        """Сечение горизонталей в середине вида на шкале."""
-        if self.contour_legend.isHidden():
-            return
-        pose = self.view.navigator.pose
-        camera = self.view.camera
-        self.contour_legend.set_step(contour_view_step(
-            pose.distance, pose.lat, math.radians(camera.fov_y),
-            self.view.height() * self.view.devicePixelRatioF(),
-            ellipsoid.A, self.view.gibs["contours"].max_level),
-            self._contour_palette)
+        """Тело, рельеф или источник высот сменились: строки реестра
+        с surface_changed (уклон, экспозиция, горизонтали, ui/surface.py)
+        строят свои слои заново."""
+        for tool in getattr(self, "row_tools", {}).values():
+            if hasattr(tool, "surface_changed"):
+                tool.surface_changed()
 
     def _set_gibs(self, name, on, made=None, cache=False, keep=False):
         """Слой NASA GIBS вида - облака, море или суша: новый загрузчик

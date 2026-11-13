@@ -33,7 +33,7 @@ from ..weather import field_attribution, field_valid_text
 from .base import (ACCEPTED_KEY, ACTIVE_ORDER, BASEMAP_KEY, EARTH_EXTRAS,
                    EXTRA_KEY, FLOW_LAYERS, GIBS_FADES, LANGUAGE_KEY, LINES_KEY,
                    OPACITY_KEY, PICTURE_LAYERS, POINT_LAYERS, QGIS_LAYERS,
-                   READY_KEY, SURFACE_EXTRAS, SYNC_KEY, all_sources,
+                   READY_KEY, SYNC_KEY, all_sources,
                    ready_keys, settings_list)
 
 
@@ -280,12 +280,17 @@ class StateMixin:
 
     def set_extra(self, key, on):
         """Сетка, звёзды или облака флажком раздела «Слои», сразу."""
-        if key in SURFACE_EXTRAS and on:
-            # Уклон и экспозиция занимают один слой: вторая строка гаснет.
-            other = SURFACE_EXTRAS[1 - SURFACE_EXTRAS.index(key)]
-            self.extras[other] = False
-            QgsSettings().setValue(EXTRA_KEY + other, False)
-            self.panel.set_extras({other: False})
+        row = ROWS.get(key)
+        if on and row is not None and row.view_map \
+                and row.view_map != "emag":
+            # Строки одного слоя вида (уклон и экспозиция): вторая гаснет
+            # без пересчёта, слой строит включённая. Карты слоя «emag»
+            # снимает _turn_row.
+            for other in ROWS.view_maps(row.view_map):
+                if other != key and self.extras.get(other):
+                    self.extras[other] = False
+                    QgsSettings().setValue(EXTRA_KEY + other, False)
+                    self.panel.set_extras({other: False})
         self.extras[key] = bool(on)
         journal.note("set_extra {} {}".format(key, bool(on)))
         QgsSettings().setValue(EXTRA_KEY + key, bool(on))
@@ -315,8 +320,6 @@ class StateMixin:
         elif key == "sun":
             self._update_sun()
             self._update_timebar()
-        elif key in SURFACE_EXTRAS or key == "contours":
-            self._set_surface()
         elif key == "cutaway":
             self._set_cutaway(on)
 
@@ -336,8 +339,7 @@ class StateMixin:
             on = bool(extras.get(key))
             if not on and key not in parked:
                 continue
-            if not earth and key not in ANY_BODY + RELIEF_BODY + (
-                    "contours",):
+            if not earth and key not in ANY_BODY + RELIEF_BODY:
                 continue
             title = (names.get(key) or maps.get(key) or (key,))[0]
             rows.append((key, title, self._row_opacity(key),

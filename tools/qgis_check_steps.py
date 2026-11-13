@@ -7500,7 +7500,7 @@ def contours_bodies():
             "levels": sorted({k[0] for k in layer.textures}),
             "max_level": layer.max_level,
             "legend": not window.contour_legend.isHidden(),
-            "palette": window._contour_palette,
+            "palette": window.row_tool("contours").palette,
             "gl": dict(view.gl_errors)}
         view.grabFramebuffer().save(os.path.join(
             TEMP, "planetx_contours_{}_{}.png".format(body, name)))
@@ -11859,7 +11859,7 @@ def contours_perm_shot():
         "textures": len(view.gibs["contours"].textures),
         "gl": dict(view.gl_errors),
         "basemap": window.source.name,
-        "palette": window._contour_palette,
+        "palette": window.row_tool("contours").palette,
         "legend": not legend.isHidden(),
         "legend_step": legend.step,
         "legend_export": legend.export is not None}
@@ -11867,7 +11867,7 @@ def contours_perm_shot():
     osm = next(s for s in window.sources if "OpenStreetMap" in s.name)
     state["contours_basemap"] = window.source
     window._switch_basemap(osm)
-    out["palette_osm"] = window._contour_palette
+    out["palette_osm"] = window.row_tool("contours").palette
 
 
 @check(15000, manual=True)
@@ -11877,7 +11877,8 @@ def contours_perm_osm():
     view.grabFramebuffer().save(os.path.join(
         TEMP, "planetx_contours_perm_osm.png"))
     window._switch_basemap(state["contours_basemap"])
-    result["contours_perm"]["palette_back"] = window._contour_palette
+    result["contours_perm"]["palette_back"] = \
+        window.row_tool("contours").palette
     window.set_extra("contours", False)
     result["contours_perm"]["legend_off"] = \
         window.contour_legend.isHidden()
@@ -11916,7 +11917,7 @@ def contours_japan_far():
         "far_pixels": _isobath_pixels(view),
         "far_levels": sorted(set(source.levels.values())),
         "far_textures": len(view.gibs["contours"].textures)}
-    out["palette"] = window._contour_palette
+    out["palette"] = window.row_tool("contours").palette
     view.navigator.stop()
     view.navigator.set_pose(Pose(38.0, 143.9, 5000.0, 0.0, 0.0))
 

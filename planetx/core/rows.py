@@ -40,7 +40,7 @@ class Row:
                  colors=(), words=(), fades=(), view_map=None,
                  default=False, earth=True, after=None, qgis_layer=False,
                  points=None, catalog=True, remember=True, preview=None,
-                 flow=None, before=None):
+                 flow=None, before=None, relief=False):
         if not key or not group:
             raise RowError("row needs key and group")
         if not callable(names):
@@ -77,6 +77,8 @@ class Row:
         # Струйки строки - поле вида flows: ползунок меняет их
         # непрозрачность, как у течений.
         self.flow = flow
+        # Строка есть у тел с высотами (уклон, горизонтали), а не у всех.
+        self.relief = bool(relief)
 class Registry:
     """Строки по порядку регистрации."""
 
@@ -109,7 +111,12 @@ class Registry:
 
     def any_body(self):
         """Ключи строк, которые есть у всех тел, не только у Земли."""
-        return tuple(row.key for row in self.rows if not row.earth)
+        return tuple(row.key for row in self.rows
+                     if not row.earth and not row.relief)
+
+    def relief_keys(self):
+        """Ключи строк, которые есть у тел с высотами."""
+        return tuple(row.key for row in self.rows if row.relief)
 
     def forgotten(self):
         """Ключи строк, выключенных при открытии окна."""

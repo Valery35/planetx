@@ -90,6 +90,10 @@ class TestRegistry(unittest.TestCase):
                          (("stars", "sky"), ("air", "sky"), ("sun", "sky"),
                           ("sats", "sky")))
         self.assertEqual(reg.any_body(), ("air", "stars"))
+        reg.add(rows.Row("slope", "terrain", names, earth=False,
+                         relief=True))
+        self.assertEqual(reg.any_body(), ("air", "stars"))
+        self.assertEqual(reg.relief_keys(), ("slope",))
 
     def test_repeated_key_refused(self):
         reg = self.make()

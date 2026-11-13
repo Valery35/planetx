@@ -11,7 +11,7 @@ from ..core.rows import Registry
 from . import (aef, cables, cadastre, clouds, currents, deposits, faults,
                fieldmap, fires, geoid, geomap, grid, infra, magnetic,
                miningareas, paleo, plants, platemotion, plates, quakes,
-               satellites, sky, tilemaps, tileoverlays, transport,
+               satellites, sky, surface, tilemaps, tileoverlays, transport,
                valuemaps, volcanoes, wiki)
 
 ROWS = Registry().add(
@@ -43,5 +43,6 @@ ROWS = Registry().add(
     *deposits.ROWS,
     *wiki.ROWS,
     *grid.ROWS,
+    *surface.ROWS,
     *cadastre.ROWS,
 )

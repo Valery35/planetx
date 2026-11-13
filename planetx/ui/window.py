@@ -46,7 +46,7 @@ from . import guide as guide_ui
 from . import style
 from .sidepanel import SidePanel
 from .layer_labels import LayerLabels
-from .legend import (BedsLegend, ContourLegend, CutawayLegend,
+from .legend import (BedsLegend, CutawayLegend,
                      FireLegend, InsolationLegend, LegendPanel, QuakeLegend,
                      SlopeLegend, TemperatureLegend, ThemeLegend,
                      ClassLegend, FieldLegend,
@@ -264,12 +264,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self._theme_scales = {}
         self._theme_replies = {}
         self.theme_legend = ThemeLegend(self.view)
-        # Горизонтали: сечение, крестик и выгрузка в проект.
-        self.contour_legend = ContourLegend(self.view)
-        self.contour_legend.hide()
-        self.contour_legend.closer = \
-            lambda: self.set_extra("contours", False)
-        self._contour_palette = "map"
         # Крестик на шкале карты витрины убирает карту.
         for legend in (self.theme_legend, self.fire_legend, self.legend):
             legend.closer = lambda: self.set_theme("")
@@ -280,8 +274,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
                        self.cutaway_legend, self.quake_legend,
                        self.fire_legend,
                        self.insolation_legend,
-                       self.slope_legend, self.contour_legend,
-                       self.legend):
+                       self.slope_legend, self.legend):
             self.legend_panel.add(legend)
         self.legend_panel.changed = self._place_attribution
         # День темы - правый бегунок шкалы времени, смена дня - после
@@ -913,7 +906,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self._value_key = None
         self.view.changed.connect(self._update_values)
         self.view.changed.connect(self._rows_view_changed)
-        self.view.changed.connect(self._update_contour_legend)
         self.view.changed.connect(self._overpass_view_changed)
         self.view.changed.connect(self._wayback_view)
         # Снимки полярных шапок, ui/polar.py.

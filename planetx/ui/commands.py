@@ -22,9 +22,9 @@ from .nasamaps import ANY_BODY, LAYERS, RELIEF_BODY, layer_names, map_names
 from .registry import ROWS
 
 # Строки группы «Карта» раздела «Слои»: ключ - название.
-MAP_ROWS = ("buildings", "contours")
+MAP_ROWS = ("buildings",)
 # Слои, которые есть вне Земли.
-ANY_PLANET = ANY_BODY + RELIEF_BODY + ("contours",)
+ANY_PLANET = ANY_BODY + RELIEF_BODY
 # Другие слова слоёв и карт: ключ - слова.
 WORDS = {
     **ROWS.words(),
@@ -32,10 +32,7 @@ WORDS = {
             "night", "city lights"),
     "cutaway": ("разрез земли", "недра", "ядро", "мантия", "кора",
                 "cutaway", "core", "mantle"),
-    "slope": ("крутизна", "уклон", "slope"),
-    "aspect": ("экспозиция", "стороны света", "aspect"),
     "buildings": ("здания", "дома", "3d", "buildings"),
-    "contours": ("изолинии", "горизонтали", "изобаты", "contours"),
     "temperature": ("температура", "жара", "temperature"),
     "weather_aurora": ("сияние", "северное сияние", "аврора",
                        "aurora", "northern lights", "ovation"),
