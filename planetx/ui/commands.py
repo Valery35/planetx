@@ -26,8 +26,6 @@ ANY_PLANET = ANY_BODY + RELIEF_BODY
 # Другие слова слоёв и карт: ключ - слова.
 WORDS = {
     **ROWS.words(),
-    "sun": ("ночь", "день", "освещение", "тень", "огни городов", "sun",
-            "night", "city lights"),
     "cutaway": ("разрез земли", "недра", "ядро", "мантия", "кора",
                 "cutaway", "core", "mantle"),
     "weather_aurora": ("сияние", "северное сияние", "аврора",

@@ -329,7 +329,6 @@ class PlacesMixin:
             if self.timebar.shown() else None
         self._follow_time()
         self._refresh_shapes()
-        self._update_sun()
         self._time_quakes()
         self._theme_timer.start()
         self._shadows_later()
@@ -346,7 +345,6 @@ class PlacesMixin:
         self._follow_time()
         self._time_quakes()
         self._refresh_shapes()
-        self._update_sun()
         self._theme_timer.start()
         self._shadows_later()
         self.flow.set_moment(self.theme_moment())

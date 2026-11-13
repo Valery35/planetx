@@ -3354,13 +3354,13 @@ def sun_on():
     view = window.view
     window.set_extra("stars", False)
     window.set_extra("sun", True)
-    window.sun_timer.stop()
+    window.row_tool("sun").timer.stop()
     view.sun = sun.direction(SUN_TIME)
     lat, lon = sun.subsolar(SUN_TIME)
     view.navigator.stop()
     view.navigator.set_pose(Pose(0.0, lon + 90.0, 2.0e7, 0.0, 0.0))
     result["sun"] = {"subsolar": [round(lat, 3), round(lon, 3)],
-                     "timer": window.sun_timer.isActive()}
+                     "timer": window.row_tool("sun").timer.isActive()}
     view.update()
 
 
@@ -3383,7 +3383,7 @@ def sun_terminator():
     out["perm_elevation"] = round(sun.elevation(58.01, 56.23, SUN_TIME), 2)
     window = state["window"]
     window.set_extra("sun", False)
-    out["off"] = [view.sun is None, window.sun_timer.isActive()]
+    out["off"] = [view.sun is None, window.row_tool("sun").timer.isActive()]
     view.update()
 
 
@@ -3396,7 +3396,7 @@ def sun_city():
     view = window.view
     window.set_extra("buildings", True)
     window.set_extra("sun", True)
-    window.sun_timer.stop()
+    window.row_tool("sun").timer.stop()
     t = SUN_TIME + 6.5 * 3600.0
     view.sun = sun.direction(t)
     view.navigator.stop()
@@ -8499,7 +8499,7 @@ def lights_on():
     for key in ("cutaway", "quakes", "clouds", "temperature"):
         window.set_extra(key, False)
     window.set_extra("sun", True)
-    window.sun_timer.stop()
+    window.row_tool("sun").timer.stop()
     t = SUN_TIME + 15.0 * 3600.0
     view.sun = sun.direction(t)
     view.navigator.stop()
@@ -24297,11 +24297,11 @@ def frame_shadows_depth():
 @check(500)
 def frame_shadows_off():
     window = state["window"]
-    window.set_sun_shadows(False)
+    window.row_tool("sun").set_shadows(False)
     window.view.grabFramebuffer()
     result["frame_shadows"]["flag_off"] = [
         window.view.shadows, window.view.shadow_map.frame is None]
-    window.set_sun_shadows(True)
+    window.row_tool("sun").set_shadows(True)
     window.set_extra("sun", False)
     window.view.update()
     window.view.grabFramebuffer()

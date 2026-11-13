@@ -306,9 +306,6 @@ class StateMixin:
         row = ROWS.get(key)
         if row is not None:
             self._turn_row(row, on)
-        elif key == "sun":
-            self._update_sun()
-            self._update_timebar()
         elif key == "cutaway":
             self._set_cutaway(on)
 
@@ -592,12 +589,12 @@ class StateMixin:
         return total
 
     def _clock_on(self):
-        """Нужны ли часы глобуса: Солнце или спутники на Земле, вид
-        неба. Тогда шкала времени открывается и без данных."""
+        """Нужны ли часы глобуса: строки реестра (needs_clock - Солнце,
+        спутники), тени участка на Земле, вид неба. Тогда шкала времени
+        открывается и без данных."""
         view = getattr(self, "view", None)
         if view is not None and view.sky_view is not None:
             return True
-        extras = getattr(self, "extras", {})
         planet = getattr(self, "planet", None)
         earth = planet is None or planet.earth
         # Тени участка идут за шкалой времени (ui/shadows.py).
@@ -605,7 +602,7 @@ class StateMixin:
         rows = any(tool.needs_clock()
                    for tool in getattr(self, "row_tools", {}).values()
                    if hasattr(tool, "needs_clock"))
-        return rows or earth and bool(extras.get("sun") or shadows)
+        return rows or earth and shadows
 
     def satellite_span(self):
         """Момент спутников, секунды UTC: правый бегунок открытой шкалы

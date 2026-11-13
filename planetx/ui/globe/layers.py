@@ -17,7 +17,7 @@ from qgis.PyQt.QtWidgets import QInputDialog, QMessageBox
 
 from ... import journal
 from ...core import (basemap, fields,
-                     sun, tomography,
+                     tomography,
                      when, oldmaps,
                      rumsey as rumsey_core,
                      crust,
@@ -571,8 +571,6 @@ class LayersMixin:
                 else themes.BY_KEY[self.theme_key].attribution
                 if self.theme_key in themes.BY_KEY
                 else themes.ATTRIBUTION)))
-        if "lights" in self.gibs_loaders:
-            parts.append(link_html(*sun.LIGHTS_ATTRIBUTION))
         if self.planet.earth and self._rumsey_shown():
             parts.append(link_html(*rumsey_core.ATTRIBUTION))
         if self.planet.earth and self._oam_shown():

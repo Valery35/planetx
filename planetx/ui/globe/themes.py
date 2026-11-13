@@ -30,7 +30,7 @@ from ..project import (SIDE_SWIPE, set_visible_on_map, write_flag,
 from ..inset import DeepSource, DemSource, terrain_prepare
 from ..properties import SCALE_RANGE
 from ..nasamaps import NasaMaps, map_names
-from .base import (RELIEF_KEY, SCALE_KEY, SUN_PERIOD,
+from .base import (RELIEF_KEY, SCALE_KEY,
                    THEME_KEY, TILE_SIZE, WAYBACK_PAUSE,
                    gibs_source, prepare_theme)
 
@@ -701,28 +701,6 @@ class ThemesMixin:
             if math.isfinite(hi):
                 return hi
         return sun.now()
-
-    def _update_sun(self):
-        """Направление на солнце в вид. Пока строка «Солнце» включена
-        и шкала закрыта, солнце идёт по часам раз в SUN_PERIOD."""
-        # Шкала времени бывает раньше строк раздела «Слои».
-        on = getattr(self, "extras", {}).get("sun", False) \
-            and self.planet.earth
-        self.view.sun = sun.direction(self.sun_time()) if on else None
-        # Огни городов - вместе с солнцем, загрузчик - при смене.
-        if on != getattr(self, "_lights_on", False):
-            self._lights_on = on
-            self._set_gibs("lights", on, cache=True)
-        timer = getattr(self, "sun_timer", None)
-        if timer is None:
-            timer = self.sun_timer = QTimer(self)
-            timer.setInterval(SUN_PERIOD)
-            timer.timeout.connect(self._update_sun)
-        if on and not self.timebar.shown():
-            timer.start()
-        else:
-            timer.stop()
-        self.view.update()
 
     def _update_layer_labels(self, force=False):
         """Подписи слоёв проекта, которые сейчас на глобусе. Слои

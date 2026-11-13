@@ -837,9 +837,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.panel.cutaway_stretch = self.cutaway_stretch()
         self.view.wedge_stretch = self.panel.cutaway_stretch
         self.panel.cutaway_stretch_changed.connect(self.set_cutaway_stretch)
-        self.panel.sun_shadows = self.sun_shadows()
-        self.view.shadows = self.panel.sun_shadows
-        self.panel.sun_shadows_changed.connect(self.set_sun_shadows)
         self.tomo = None
         self._tomo_reply = None
         self._tomo_job = None

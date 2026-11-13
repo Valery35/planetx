@@ -11,7 +11,7 @@ import time
 import numpy as np
 from qgis.core import QgsSettings
 
-from ...core import (basemap, cadastre, clouds, fields, geology, sun,
+from ...core import (basemap, cadastre, clouds, fields, geology,
                      cutaway, slabs, themes, tilemaps, wms)
 from ...core.ellipsoid import geodetic_to_ecef
 from ...core.measure import nearest_vertex
@@ -146,8 +146,6 @@ DEFAULT_GROUPS = (BORDERS, PLACES)
 RELIEF_KEY = "PlanetX/relief"  # показывать ли рельеф
 # Растягивать ли кору разреза Земли издалека, по умолчанию да.
 STRETCH_KEY = "PlanetX/cutaway_stretch"
-# Тени в кадре при строке «Солнце», по умолчанию да.
-SHADOWS_KEY = "PlanetX/sun_shadows"
 # Раскрашивать ли мантию разреза томографией, по умолчанию нет.
 TOMO_KEY = "PlanetX/cutaway_tomo"
 # Поток по путям (core/pathflow.py): шаг таймера штрихов, мс, подъём
@@ -158,19 +156,11 @@ FLOW_TICK = 40
 FLOW_LIFT = 20.0
 FLOW_WIDER = 1.5
 FLOW_REACH = 2.0
-# Сетка, звёзды, облака: ключ настройки и умолчание. Звёзды включены,
-# как в Google Earth, сетка и облака выключены. Решение помощника от
-# 29 сентября 2026 года, его утверждает автор. 3D-здания выключены,
-# решение автора от 29 сентября 2026 года.
-# Солнце выключено, умолчание плана работ после 0.16.0.
-EXTRA_DEFAULTS = {"sun": False,
-                  "cutaway": False,
-                  **ROWS.defaults(),
-                  }
+# Строки раздела «Слои» и умолчания: разрез Земли выключен, прочие -
+# умолчания строк реестра (default).
+EXTRA_DEFAULTS = {"cutaway": False, **ROWS.defaults()}
 # Строки раздела «Слои», которые есть только у Земли.
-EARTH_EXTRAS = ("sun",
-                "cutaway") \
-    + ROWS.earth_keys()
+EARTH_EXTRAS = ("cutaway",) + ROWS.earth_keys()
 # Карты на общем слое вида «emag», на глобусе одна из них: карты
 # значений, Macrostrat, карты картинками, изменения местности и поля.
 EMAG_MAPS = ROWS.view_maps("emag")
@@ -184,7 +174,6 @@ DATA_DIR = os.path.join(PLUGIN_DIR, "data")
 AUTO_DEFAULT = True
 # Полоса очагов окна «Разрез» в демо «Японский жёлоб», км.
 DEMO_QUAKE_BAND = 300.0
-SUN_PERIOD = 60000  # мс между пересчётами солнца по часам компьютера
 EXTRA_KEY = "PlanetX/show_"  # + ключ строки
 THEME_KEY = "PlanetX/theme"  # тема NASA GIBS, "" - выключена
 THEME_DELAY = 300  # мс после движения шкалы времени до смены дня темы
@@ -403,10 +392,6 @@ def gibs_source(name):
     """Источник и подготовка тайла слоя GIBS по имени слоя вида."""
     if name == "cadastre":
         return cadastre_source(), prepare_lights
-    if name == "lights":
-        return (basemap.Source("NASA Black Marble", sun.LIGHTS_URL,
-                               sun.LIGHTS_LEVEL, sun.LIGHTS_ATTRIBUTION,
-                               builtin=True), prepare_lights)
     if name == "clouds":
         return (basemap.Source("NASA GIBS", clouds.url_template(
             time.time()), clouds.MAX_LEVEL, clouds.ATTRIBUTION,

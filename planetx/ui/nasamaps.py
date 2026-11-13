@@ -87,15 +87,13 @@ VECTOR_COLORS = (((250, 220, 60), (240, 240, 240)),
                  ((60, 120, 220), (90, 170, 90), (150, 110, 70)))
 MAP_COLORS = ROWS.colors()
 # Вторая строка слоя в каталоге - источник.
-SOURCES = {"sun": "NASA Black Marble",
-           "cutaway": "PREM, CRUST1.0, Slab2",
+SOURCES = {"cutaway": "PREM, CRUST1.0, Slab2",
            **ROWS.sources()}
 # Слои витрины: ключ строки окна глобуса и группа.
 # Недра с 27 октября 2026 года - четыре подгруппы вместо 21 строки
 # подряд, решение автора.
 LAYERS = ROWS.place((
-          ("sun", "sky"),
-          ("cutaway", "geology")))
+          ("cutaway", "geology"),))
 # Строки-окна: источник данных у точки взгляда открывает своё окно
 # (действие строки «Поиск» GlobeWindow._actions). Прежде их было видно
 # только в меню на глобусе, решение автора от 27 октября 2026 года.
@@ -244,12 +242,6 @@ def tool_names():
 def layer_names():
     """Слой витрины: ключ - (название, подсказка)."""
     return {
-        "sun": (tr("Солнце"), tr(
-            "Свет рельефа, зданий и воздуха по положению солнца. "
-            "Ночная сторона Земли тёмная. Время солнца - конец "
-            "промежутка открытой шкалы времени, без неё - часы "
-            "компьютера. Без флажка свет падает с северо-запада, "
-            "как на карте рельефа.")),
         "cutaway": (tr("Разрез Земли"), tr(
             "Вынимает из Земли сектор под точкой взгляда - "
             "четверть полушария шириной 90° по долготе. На его "
@@ -570,8 +562,6 @@ def layer_url(key):
         template = PREVIEWS[key]
         if callable(template):  # адрес на сегодня, облака
             template = template()
-    elif key == "sun":
-        template = sun.LIGHTS_URL
     else:
         return None
     return template.replace("{z}", str(z)).replace("{x}", str(x)).replace(
@@ -898,9 +888,6 @@ class NasaMaps(QWidget):
             return cutaway_image()
         if key == "plates":
             return plates_image(self.base)
-        if key == "sun":
-            lights = QImage.fromData(data) if data else QImage()
-            return sun_image(self.base, None if lights.isNull() else lights)
         if key in MAP_COLORS:
             return ramp_image(MAP_COLORS[key], self.base)
         return ramp_image(layer_ramp(key), self.base)
