@@ -554,14 +554,10 @@ class LayersMixin:
         if "emag" in self.gibs_loaders and self._row_map_shown():
             parts.append(link_html(*self.row_tool(
                 self._row_map_shown()).credit()))
-        overture = self.buildings_loader is not None \
-            and self._overture_on()
         if self.planet.earth and (
                 self._applied_groups and self.ofm_layer is not None
-                or self.buildings_loader is not None and not overture):
+                or self._row_hook("vector_credit")):
             parts.append(self._vector_credit())
-        if self.planet.earth and overture:
-            parts.append(link_html(*datasources.OVERTURE_CREDIT))
         if self.view.store.scale or "slope" in self.gibs_loaders:
             parts.insert(1, self._terrain_credit() if self.planet.earth
                          else html.escape(self.planet.terrain[3])
@@ -668,8 +664,7 @@ class LayersMixin:
         # не пересобирается, картинки слоёв проекта остаются.
         if self._applied_groups:
             self._update_overlay()
-        if self.extras.get("buildings") and self.buildings_loader is None:
-            self._set_buildings(True)
+        self._row_hook("vector_ready")
         self._show_attribution()
 
     def _start_place_loader(self):

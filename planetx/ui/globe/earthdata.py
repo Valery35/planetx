@@ -157,10 +157,7 @@ class EarthDataMixin:
             self._refresh_relief()
             self._update_relief_menu()
         elif what == "vector":
-            if self.buildings_loader is not None:
-                self.buildings_loader.abort()
-                self.buildings_loader.deleteLater()
-                self.buildings_loader = None
+            self._row_hook("vector_changed")
             self.ofm_layer = None
             self.rail_layer = None
             self._ofm_source = None

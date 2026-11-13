@@ -13,13 +13,13 @@ from qgis.PyQt.QtCore import QTimer
 
 from ... import journal
 from ...core import (basemap, events, sun,
-                     themes, wayback, sources as datasources)
+                     themes, wayback)
 from ...core.geocode import link_zoom
 from ...core.sync import ground_size
 from ...core.terrain import MAX_LEVEL as TERRAIN_MAX
 from ...i18n import tr
 from ...net.loader import TileLoader
-from ...net.overlay import fetch_bytes, fetch_json
+from ...net.overlay import fetch_bytes
 from .. import guide as guide_ui
 from .. import style
 from ..identify import Group
@@ -30,10 +30,9 @@ from ..project import (SIDE_SWIPE, set_visible_on_map, write_flag,
 from ..inset import DeepSource, DemSource, terrain_prepare
 from ..properties import SCALE_RANGE
 from ..nasamaps import NasaMaps, map_names
-from ..overture import OvertureTiles, release_url
 from .base import (RELIEF_KEY, SCALE_KEY, SUN_PERIOD,
                    THEME_KEY, TILE_SIZE, WAYBACK_PAUSE,
-                   buildings_decoder, gibs_source, prepare_theme)
+                   gibs_source, prepare_theme)
 
 
 class ThemesMixin:
@@ -724,54 +723,6 @@ class ThemesMixin:
         else:
             timer.stop()
         self.view.update()
-
-    def _overture_on(self):
-        """Здания - из архива Overture Maps (окно «Источники данных»)."""
-        return QgsSettings().value(datasources.BUILDINGS_KEY, "") \
-            == datasources.OVERTURE
-
-    def _set_buildings(self, on):
-        """3D-здания: загрузчик тайлов векторной основы, архива Overture
-        Maps или никакого. Адрес тайлов основы даёт TileJSON, адрес
-        архива - каталог STAC Overture, до их прихода здания ждут."""
-        old = self.buildings_loader
-        if old is not None:
-            old.abort()
-            old.deleteLater()
-        self.buildings_loader = None
-        overture = on and self._overture_on()
-        if overture:
-            url = getattr(self, "_overture_url", None)
-            if url is not None:
-                self.buildings_loader = OvertureTiles(url, parent=self)
-                self.buildings_loader.loaded.connect(
-                    lambda key, found, extra: self.view.add_buildings(
-                        key, found))
-            elif getattr(self, "_overture_reply", None) is None:
-                self._overture_reply = fetch_json(
-                    datasources.OVERTURE_STAC, self._overture_catalog,
-                    prefer_cache=False)
-        elif on and self._ofm_source is not None:
-            self.buildings_loader = TileLoader(self._ofm_source, parent=self,
-                                               decode=buildings_decoder)
-            self.buildings_loader.loaded.connect(
-                lambda key, found, extra: self.view.add_buildings(key, found))
-        elif on and self._tilejson is None:
-            self._tilejson = fetch_json(self._vector_choice(),
-                                        self._tilejson_done)
-        self.view.set_buildings(on, self.buildings_loader,
-                                "overture" if overture else "vector")
-        self._show_attribution()
-
-    def _overture_catalog(self, data, error):
-        """Пришёл каталог STAC Overture: адрес архива последнего выпуска.
-        Без ответа - выпуск по умолчанию."""
-        self._overture_reply = None
-        if error:
-            journal.note("overture catalog: {}".format(error))
-        self._overture_url = release_url(data)
-        if self.extras.get("buildings") and self.buildings_loader is None:
-            self._set_buildings(True)
 
     def _update_layer_labels(self, force=False):
         """Подписи слоёв проекта, которые сейчас на глобусе. Слои

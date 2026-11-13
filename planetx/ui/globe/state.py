@@ -306,8 +306,6 @@ class StateMixin:
         row = ROWS.get(key)
         if row is not None:
             self._turn_row(row, on)
-        elif key == "buildings":
-            self._set_buildings(on)
         elif key == "sun":
             self._update_sun()
             self._update_timebar()

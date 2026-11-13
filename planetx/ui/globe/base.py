@@ -71,7 +71,7 @@ SECTION_TIME_PAUSE = 400
 # Выбор помощника, утверждает автор.
 WAYBACK_PAUSE = 700
 # Порядок строк «На глобусе»: слои витрины, слои «Карты», карты витрины.
-ACTIVE_ORDER = tuple(key for key, _ in GALLERY_LAYERS) + ("buildings",) \
+ACTIVE_ORDER = tuple(key for key, _ in GALLERY_LAYERS) \
     + tuple(row.key for row in ROWS.rows if not row.catalog)
 # Каталог «Добавить данные» в левой панели: панель не уже, пиксели.
 # Горизонтали тел - на столько уровней глубже уровня высот тела, по
@@ -163,12 +163,12 @@ FLOW_REACH = 2.0
 # 29 сентября 2026 года, его утверждает автор. 3D-здания выключены,
 # решение автора от 29 сентября 2026 года.
 # Солнце выключено, умолчание плана работ после 0.16.0.
-EXTRA_DEFAULTS = {"buildings": False, "sun": False,
+EXTRA_DEFAULTS = {"sun": False,
                   "cutaway": False,
                   **ROWS.defaults(),
                   }
 # Строки раздела «Слои», которые есть только у Земли.
-EARTH_EXTRAS = ("buildings", "sun",
+EARTH_EXTRAS = ("sun",
                 "cutaway") \
     + ROWS.earth_keys()
 # Карты на общем слое вида «emag», на глобусе одна из них: карты

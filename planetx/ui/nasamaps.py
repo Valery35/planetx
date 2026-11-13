@@ -81,17 +81,14 @@ VECTOR = "vector:"
 # Вид строки слоя всего каталога GIBS: строки приходят по запросу.
 GIBS = "gibsall"
 GIBS_SEARCH = 3  # знаков поиска, с которых просится каталог GIBS
-MAP_ROWS = ("buildings",)
 # Цвета превью строк «Карты» - выбор помощника.
 VECTOR_COLORS = (((250, 220, 60), (240, 240, 240)),
                  ((255, 200, 70), (250, 240, 180), (90, 90, 90)),
                  ((60, 120, 220), (90, 170, 90), (150, 110, 70)))
-MAP_COLORS = {"buildings": ((200, 190, 175), (150, 140, 130)),
-              **ROWS.colors()}
+MAP_COLORS = ROWS.colors()
 # Вторая строка слоя в каталоге - источник.
 SOURCES = {"sun": "NASA Black Marble",
            "cutaway": "PREM, CRUST1.0, Slab2",
-           "buildings": "OpenFreeMap",
            **ROWS.sources()}
 # Слои витрины: ключ строки окна глобуса и группа.
 # Недра с 27 октября 2026 года - четыре подгруппы вместо 21 строки
@@ -261,11 +258,6 @@ def layer_names():
             "субдукции, на ней видна погружающаяся плита. "
             "Углы сектора тянутся мышью. Сектор ставится заново "
             "при каждом включении строки.")),
-        "buildings": (tr("3D-здания"), tr(
-            "Объёмные здания из OpenStreetMap по векторным тайлам "
-            "OpenFreeMap. Они видны, когда камера ближе 6 км к земле. "
-            "Высота взята из OSM, иначе из этажности. Здание без этих "
-            "сведений получает высоту 5 м.")),
         **ROWS.names(),
     }
 
@@ -815,9 +807,6 @@ class NasaMaps(QWidget):
             self.names[key] = (title, tip)
             self._row(key, MAP, VECTOR)
             self.thumbs[key] = ramp_image(VECTOR_COLORS[n % 3])
-        for key in MAP_ROWS:
-            self._row(key, MAP, LAYER)
-            self.thumbs[key] = self._layer_thumb(key)
         for key, group in LAYERS:
             self._row(key, group, LAYER)
             self.thumbs[key] = self._layer_thumb(key)

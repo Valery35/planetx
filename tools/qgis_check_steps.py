@@ -24946,7 +24946,7 @@ BUILDINGS_POSE = (58.0105, 56.2294, 1500.0, 30.0, 60.0)
 def _buildings_report(window):
     view = window.view
     b = view.buildings
-    loader = window.buildings_loader
+    loader = window.row_tool("buildings").loader
     return {"wanted": len(b.wanted), "footprints": len(b.footprints),
             "buffers": len(b.buffers), "drawn": b.drawn,
             "vertices": b.vertices, "missing": b.missing(),
@@ -24971,7 +24971,7 @@ def buildings_on():
     view.navigator.set_pose(Pose(*BUILDINGS_POSE))
     window.set_extra("buildings", True)
     state["buildings_failed"] = []
-    window.buildings_loader.failed.connect(
+    window.row_tool("buildings").loader.failed.connect(
         lambda key, text: state["buildings_failed"].append(
             [list(key), str(text)]))
     view.update()
@@ -25016,7 +25016,7 @@ def buildings_off():
     window = state["window"]
     view = window.view
     result["buildings"]["off"] = {
-        "loader": window.buildings_loader is None,
+        "loader": window.row_tool("buildings").loader is None,
         "drawn": view.buildings.drawn}
     window.set_extra("buildings", True)
     lat, lon = BUILDINGS_POSE[:2]
@@ -25087,7 +25087,7 @@ def buildings_scene():
     apply(window, scene)
     result["buildings_scene"] = {
         "saved": saved, "restored": window.extras.get("buildings"),
-        "loader": window.buildings_loader is not None}
+        "loader": window.row_tool("buildings").loader is not None}
     window.set_extra("buildings", False)
 
 
@@ -29461,7 +29461,7 @@ def _overture_report(window):
     view = window.view
     b = view.buildings
     found = [f for f in b.footprints.values() if f != "empty"]
-    loader = window.buildings_loader
+    loader = window.row_tool("buildings").loader
     return {"loader": type(loader).__name__ if loader else None,
             "source": b.source, "tiles": len(b.footprints),
             "with_buildings": len(found),
@@ -29502,7 +29502,7 @@ def overture_wait():
     view = window.view
     view.grabFramebuffer().save(os.path.join(TEMP, "planetx_overture.png"))
     result["overture"] = {"overture": _overture_report(window),
-                          "url": getattr(window, "_overture_url", None)}
+                          "url": window.row_tool("buildings").overture_url}
     QgsSettings().setValue(sources.BUILDINGS_KEY, "")
     window.sources_changed("vector")
     view.update()
@@ -29516,7 +29516,7 @@ def overture_back():
                                              "planetx_overture_ofm.png"))
     result["overture"]["vector"] = _overture_report(window)
     window.set_extra("buildings", False)
-    result["overture"]["off"] = window.buildings_loader is None
+    result["overture"]["off"] = window.row_tool("buildings").loader is None
     view.update()
 
 @check(1000)

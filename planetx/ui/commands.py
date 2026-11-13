@@ -21,8 +21,6 @@ from ..i18n import is_russian, tr
 from .nasamaps import ANY_BODY, LAYERS, RELIEF_BODY, layer_names, map_names
 from .registry import ROWS
 
-# Строки группы «Карта» раздела «Слои»: ключ - название.
-MAP_ROWS = ("buildings",)
 # Слои, которые есть вне Земли.
 ANY_PLANET = ANY_BODY + RELIEF_BODY
 # Другие слова слоёв и карт: ключ - слова.
@@ -32,7 +30,6 @@ WORDS = {
             "night", "city lights"),
     "cutaway": ("разрез земли", "недра", "ядро", "мантия", "кора",
                 "cutaway", "core", "mantle"),
-    "buildings": ("здания", "дома", "3d", "buildings"),
     "weather_aurora": ("сияние", "северное сияние", "аврора",
                        "aurora", "northern lights", "ovation"),
 }
@@ -60,9 +57,7 @@ def build(window):
     extras = getattr(window, "extras", {})
     names = layer_names()
     titles = dict((key, value[0]) for key, value in names.items())
-    titles.update({"buildings": tr("3D-здания")})
-    keys = [key for key, _ in LAYERS] + list(MAP_ROWS)
-    for key in keys:
+    for key, _ in LAYERS:
         if key not in titles or (not earth and key not in ANY_PLANET):
             continue
         on = bool(extras.get(key))
