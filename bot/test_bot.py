@@ -5,12 +5,19 @@
 
     python -m unittest bot/test_bot.py
 """
+import datetime
 import os
+import re
+import shutil
 import sys
+import tempfile
 import unittest
+import zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import planetx_bot as bot  # noqa: E402
+import health  # noqa: E402
+import make_bundle  # noqa: E402
 
 
 def release(tag, name="", assets=()):
@@ -125,6 +132,166 @@ class TestExtensions(unittest.TestCase):
                          ("isoliner-scene", "rustgis-v0.5.1"))
         self.assertEqual(bot.post_args("isoliner v1.2.0"),
                          ("isoliner", "v1.2.0"))
+
+
+class FakeBot(bot.Bot):
+    """Бот без сети: вызовы Telegram пишутся в список."""
+
+    def __init__(self, published):
+        self.owner = 1
+        self.channel = "@channel"
+        self.published = published
+        self.releases = {}
+        self.calls = []
+
+    def call(self, method, **params):
+        self.calls.append((method, params))
+        return {}
+
+    def release_of(self, repo, tag):
+        return release(tag, "Isoliner3D " + tag, ["isoliner3d.zip"])
+
+    def channel_posts(self):
+        return [p for m, p in self.calls
+                if m == "sendMessage" and p["chat_id"] == self.channel]
+
+
+class TestDoublePost(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.mkdtemp()
+        self.path = os.path.join(self.folder, "published.txt")
+
+    def tearDown(self):
+        shutil.rmtree(self.folder)
+
+    def query(self):
+        return {"message": {"chat": {"id": 1}, "message_id": 7}}
+
+    def test_second_publish_does_not_post(self):
+        one = FakeBot(self.path)
+        one.publish("qgis-isoliner3d", "1.5.4", self.query())
+        one.publish("qgis-isoliner3d", "1.5.4", self.query())
+        self.assertEqual(len(one.channel_posts()), 1)
+        # Перезапуск приложения: отметка в файле, не в памяти.
+        two = FakeBot(self.path)
+        two.publish("qgis-isoliner3d", "1.5.4", self.query())
+        self.assertEqual(two.channel_posts(), [])
+        two.publish("qgis-isoliner3d", "1.5.5", self.query())
+        self.assertEqual(len(two.channel_posts()), 1)
+
+    def test_failed_post_is_not_marked(self):
+        one = FakeBot(self.path)
+
+        def broken(method, **params):
+            if params.get("chat_id") == "@channel":
+                raise RuntimeError("sendMessage: Bad Request")
+            return {}
+        one.call = broken
+        one.publish("qgis-isoliner3d", "1.5.4", self.query())
+        self.assertEqual(bot.read_published(self.path), set())
+
+
+class TestLineup(unittest.TestCase):
+    def test_every_product_described_and_fits(self):
+        for entry in bot.LINEUP:
+            for lang in ("ru", "en"):
+                self.assertIn(entry[0], bot.ABOUT[lang])
+            self.assertLessEqual(len(("l:" + entry[0]).encode("utf-8")),
+                                 bot.CALLBACK_LIMIT)
+        docs = bot.docs_reply("ru")
+        for name in ("Isoliner Scene", "RustPlanetX",
+                     "Isoliner3D для RustGIS", "Isoliner для RustGIS",
+                     "Topoliner для RustGIS", "PlanetX Lite"):
+            self.assertIn(name, docs)
+        self.assertIn("valery35.github.io/isoliner-scene", docs)
+
+    def test_latest_by_tag_prefix_in_shared_repo(self):
+        listing = [release("rustgis-v0.5.1"), release("v0.4.0"),
+                   release("rustgis-v0.5.0"), release("v0.3.0")]
+        listing[0]["prerelease"] = False
+
+        def fetch(url):
+            self.assertIn("isoliner-scene", url)
+            return listing
+        scene = bot.pick_release(bot.lineup_entry("isoliner-scene"), fetch)
+        ext = bot.pick_release(bot.lineup_entry("isoliner3d-rustgis"), fetch)
+        self.assertEqual(scene["tag_name"], "v0.4.0")
+        self.assertEqual(ext["tag_name"], "rustgis-v0.5.1")
+        with self.assertRaises(LookupError):
+            bot.pick_release(bot.lineup_entry("isoliner-scene"),
+                             lambda url: [release("rustgis-v0.5.1")])
+
+    def test_latest_word(self):
+        self.assertEqual(bot.lineup_of("RustPlanetX"), "rustplanetx")
+        self.assertEqual(bot.lineup_of("isoliner для rustgis"),
+                         "isoliner-rustgis")
+        self.assertEqual(bot.lineup_of("Isoliner"), "qgis-isoliner")
+
+
+class TestHealth(unittest.TestCase):
+    TODAY = datetime.date(2026, 11, 16)
+    NOW = 1_800_000_000
+
+    def good(self):
+        return {"url": "https://x.pythonanywhere.com/telegram",
+                "pending_update_count": 0}
+
+    def test_healthy(self):
+        self.assertEqual(health.problems(
+            self.good(), 404, "PlanetX bot abc1234 2026-11-16T10:00Z",
+            self.TODAY, self.NOW), [])
+
+    def test_each_trouble_found(self):
+        info = {"url": "", "pending_update_count": 9,
+                "last_error_date": self.NOW - 600,
+                "last_error_message": "Connection refused"}
+        found = health.problems(info, None, "timed out", self.TODAY,
+                                self.NOW)
+        self.assertEqual(len(found), 4)
+        found = health.problems(self.good(), 404,
+                                "PlanetX bot mismatch bot=a data=b",
+                                self.TODAY, self.NOW)
+        self.assertEqual(len(found), 1)
+        self.assertIn("Половинная", found[0])
+
+    def test_expiry_warned_two_weeks_ahead(self):
+        due = health.APP_EXPIRES
+        quiet = due - datetime.timedelta(days=health.WARN_DAYS + 1)
+        warned = due - datetime.timedelta(days=health.WARN_DAYS)
+        ok = (self.good(), 404, "PlanetX bot x")
+        self.assertEqual(health.problems(*ok, quiet, self.NOW), [])
+        self.assertEqual(len(health.problems(*ok, warned, self.NOW)), 1)
+        late = health.problems(*ok, due + datetime.timedelta(days=1),
+                               self.NOW)
+        self.assertIn("наступил", late[0])
+        self.assertEqual(health.APP_EXPIRES, datetime.date(2027, 2, 16))
+
+
+class TestBundle(unittest.TestCase):
+    def test_bundle_is_whole_and_half_is_seen(self):
+        folder = tempfile.mkdtemp()
+        try:
+            out = make_bundle.bundle(os.path.join(folder, "b.zip"),
+                                     "abc1234 2026-11-16T10:00Z")
+            with zipfile.ZipFile(out) as z:
+                names = set(z.namelist())
+                z.extractall(folder)
+            for name in make_bundle.FILES + (make_bundle.STAMP,):
+                self.assertIn("planetx-bot/" + name, names)
+            base = os.path.join(folder, "planetx-bot")
+            with open(os.path.join(base, "bot", "planetx_bot.py"),
+                      encoding="utf-8") as f:
+                built = re.search(r'^BUILD = "([^"]*)"$', f.read(),
+                                  re.MULTILINE).group(1)
+            stamp = os.path.join(base, "bot", "data", "build.json")
+            self.assertEqual(bot.build_state(built, stamp), built)
+            # Новый бот со старыми данными - половинная выкладка.
+            self.assertTrue(bot.build_state("def5678 2026-12-01T00:00Z",
+                                            stamp).startswith("mismatch"))
+            self.assertEqual(bot.build_state("", os.path.join(
+                folder, "none.json")), "dev")
+        finally:
+            shutil.rmtree(folder)
 
 
 if __name__ == "__main__":

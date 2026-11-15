@@ -1,0 +1,22 @@
+# Суточная проверка бота PlanetX (bot/health.py). Неполадки и близкий
+# срок бесплатного приложения PythonAnywhere уходят автору в Telegram,
+# шаг краснеет. Секреты - TELEGRAM_BOT_TOKEN и TELEGRAM_OWNER, те же,
+# что у «Telegram о выпуске». GitHub выключает расписание хранилища
+# без коммитов 60 дней, тогда его включают на вкладке Actions.
+name: Проверка бота
+
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Проверка
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_OWNER: ${{ secrets.TELEGRAM_OWNER }}
+        run: python3 bot/health.py

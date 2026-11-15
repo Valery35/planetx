@@ -110,7 +110,28 @@ LITE_WORDS = ("lite", "лайт", "лайте", "лайта", "лайтом", "p
 # Страница в браузере у программ без каталога QGIS, для /docs.
 WEB_PAGES = {
     "planetx-lite": "https://valery35.github.io/planetx-lite/",
+    "isoliner-scene": "https://valery35.github.io/isoliner-scene/",
 }
+# Продукты линейки в /latest и /docs, по порядку: ключ кнопки, продукт,
+# хранилище, приставка метки, расширение ли RustGIS. Приставка выбирает
+# выпуски продукта в общем хранилище (isoliner-scene - Scene по v*,
+# расширение Isoliner3D по rustgis-v*), пусто - последний выпуск
+# хранилища. Новый продукт - строка здесь и описание в ABOUT.
+LINEUP = (
+    ("planetx", "PlanetX", "planetx", "", False),
+    ("qgis-isoliner", "Isoliner", "qgis-isoliner", "", False),
+    ("qgis-isoliner3d", "Isoliner3D", "qgis-isoliner3d", "", False),
+    ("topoliner", "Topoliner", "topoliner", "", False),
+    ("routeliner", "Routeliner", "routeliner", "", False),
+    ("repoliner", "Repoliner", "repoliner", "", False),
+    ("planetx-lite", "PlanetX Lite", "planetx-lite", "", False),
+    ("isoliner-scene", "Isoliner Scene", "isoliner-scene", "v", False),
+    ("rustplanetx", "RustPlanetX", "rustplanetx", "", True),
+    ("isoliner3d-rustgis", "Isoliner3D", "isoliner-scene", "rustgis-v",
+     True),
+    ("isoliner-rustgis", "Isoliner", "isoliner-rustgis", "", True),
+    ("topoliner-rustgis", "Topoliner", "topoliner-rustgis", "", True),
+)
 # Страницы программ на сайте www.informpp.ru, для /docs.
 SITE_PAGES = {
     "planetx-lite": "https://www.informpp.ru/главная-страница/planetx/planetx-lite",
@@ -128,6 +149,16 @@ ABOUT = {
         "repoliner": "свой репозиторий модулей QGIS из архивов",
         "planetx-lite": "глобус PlanetX без QGIS - программа для "
                         "Windows, Linux и macOS и страница в браузере",
+        "isoliner-scene": "просмотр сцен Isoliner3D без QGIS - программа "
+                          "для Windows, Linux и macOS и страница "
+                          "в браузере",
+        "rustplanetx": "трёхмерный глобус PlanetX в RustGIS",
+        "isoliner3d-rustgis": "сцены, тела, скважины и отчёты Isoliner3D "
+                              "в RustGIS",
+        "isoliner-rustgis": "инструменты Isoliner в RustGIS - "
+                            "декластеризация, вариограммы, кросс-проверка",
+        "topoliner-rustgis": "топология линий и полигонов Topoliner "
+                             "в RustGIS",
     },
     "en": {
         "planetx": "a 3D globe inside QGIS",
@@ -139,6 +170,15 @@ ABOUT = {
         "repoliner": "your own QGIS plugin repository from archives",
         "planetx-lite": "the PlanetX globe without QGIS - a program for "
                         "Windows, Linux and macOS and a web page",
+        "isoliner-scene": "Isoliner3D scene viewer without QGIS - a program "
+                          "for Windows, Linux and macOS and a web page",
+        "rustplanetx": "the PlanetX 3D globe in RustGIS",
+        "isoliner3d-rustgis": "Isoliner3D scenes, bodies, boreholes and "
+                              "reports in RustGIS",
+        "isoliner-rustgis": "Isoliner tools in RustGIS - declustering, "
+                            "variograms, cross-validation",
+        "topoliner-rustgis": "Topoliner topology of lines and polygons "
+                             "in RustGIS",
     },
 }
 _REPO = re.compile(r"[A-Za-z0-9_.-]{1,40}")
@@ -146,6 +186,17 @@ SITE = "https://www.informpp.ru/главная-страница/planetx/qgis-pla
 CONFIG = os.path.join(
     os.environ.get("APPDATA") or os.path.expanduser("~/.config"),
     "PlanetX-bot", "config.json")
+# Опубликованные в канале выпуски «хранилище:метка», по строке. Второе
+# «Опубликовать» того же выпуска пост не ставит - ни быстрое двойное
+# касание, ни старый черновик, ни повтор обновления Telegram. Повторить
+# пост нарочно - удалить строку из файла.
+PUBLISHED = os.path.join(os.path.dirname(CONFIG), "published.txt")
+# Метка сборки архива. bot/make_bundle.py вписывает её сюда и в
+# bot/data/build.json, адрес бота отвечает «PlanetX bot <метка>», при
+# половинной выкладке - «PlanetX bot mismatch …».
+BUILD = ""
+BUILD_FILE = os.path.join(HERE, "data", "build.json")
+RELEASE_LIST = "https://api.github.com/repos/Valery35/{}/releases?per_page=30"
 # Путь приёма обновлений Telegram на сервере.
 WEBHOOK_PATH = "/telegram"
 USER_AGENT = "PlanetX-bot (+https://github.com/Valery35/planetx)"
@@ -191,7 +242,8 @@ TEXTS = {
     "ru": {
         "start": (
             "Это бот модулей QGIS PlanetX, Isoliner, Isoliner3D, "
-            "Topoliner, Routeliner, Repoliner и программы PlanetX Lite.\n\n"
+            "Topoliner, Routeliner, Repoliner, программ PlanetX Lite "
+            "и Isoliner Scene и расширений RustGIS.\n\n"
             "Напишите вопрос, например «как добавить 3D-модель» или "
             "«topoliner висячие узлы», бот найдёт разделы руководств "
             "модулей.\n\n"
@@ -203,7 +255,7 @@ TEXTS = {
                  "или откройте руководство: /docs"),
         "found": "Разделы руководства:",
         "show": "Показать раздел",
-        "docs": "Модули QGIS ООО «Информ++»:",
+        "docs": "Модули и программы ООО «Информ++»:",
         "pick": "Выпуск какого модуля показать?",
         "manual": "Руководство PlanetX",
         "site": "PlanetX на сайте",
@@ -217,6 +269,7 @@ TEXTS = {
         "web": "В браузере",
         "on_site": "На сайте",
         "no_release": "Не удалось узнать последний выпуск, попробуйте позже.",
+        "no_release_yet": "У {name} выпусков пока нет.",
         "report_empty": ("Напишите текст после команды, например:\n"
                          "/report глобус не открывается в QGIS 3.40"),
         "report_done": "Спасибо, сообщение передано разработчикам.",
@@ -226,8 +279,9 @@ TEXTS = {
     "en": {
         "start": (
             "This is the bot of the QGIS plugins PlanetX, Isoliner, "
-            "Isoliner3D, Topoliner, Routeliner, Repoliner and of the "
-            "PlanetX Lite program.\n\n"
+            "Isoliner3D, Topoliner, Routeliner, Repoliner, of the "
+            "PlanetX Lite and Isoliner Scene programs and of the RustGIS "
+            "extensions.\n\n"
             "Ask a question, for example \"how to add a 3D model\" or "
             "\"topoliner dangles\", and the bot finds the sections of "
             "the plugin manuals.\n\n"
@@ -239,7 +293,7 @@ TEXTS = {
                  "the manual: /docs"),
         "found": "Manual sections:",
         "show": "Show the section",
-        "docs": "QGIS plugins of Inform++ LLC:",
+        "docs": "Plugins and programs of Inform++ LLC:",
         "pick": "Which plugin release to show?",
         "manual": "PlanetX manual",
         "site": "PlanetX website",
@@ -253,6 +307,7 @@ TEXTS = {
         "web": "In the browser",
         "on_site": "Website",
         "no_release": "The latest release is unavailable, try again later.",
+        "no_release_yet": "{name} has no releases yet.",
         "report_empty": ("Write the text after the command, for example:\n"
                          "/report the globe does not open in QGIS 3.40"),
         "report_done": "Thank you, the message went to the developers.",
@@ -274,7 +329,8 @@ PROFILE = {
         ],
         "description": (
             "Модули QGIS ООО «Информ++» - PlanetX, Isoliner, Isoliner3D, "
-            "Topoliner, Routeliner, Repoliner.\n\n"
+            "Topoliner, Routeliner, Repoliner, программы PlanetX Lite "
+            "и Isoliner Scene, расширения RustGIS.\n\n"
             "Бот показывает последние выпуски модулей, отвечает на "
             "вопросы по руководствам модулей и передаёт сообщения "
             "разработчикам."),
@@ -290,7 +346,8 @@ PROFILE = {
         ],
         "description": (
             "QGIS plugins of Inform++ LLC - PlanetX, Isoliner, Isoliner3D, "
-            "Topoliner, Routeliner, Repoliner.\n\n"
+            "Topoliner, Routeliner, Repoliner, the PlanetX Lite and "
+            "Isoliner Scene programs, RustGIS extensions.\n\n"
             "The bot shows the latest plugin releases, answers questions "
             "from the plugin manuals and passes messages to the "
             "developers."),
@@ -585,6 +642,25 @@ def github(url):
         return json.loads(answer.read().decode("utf-8"))
 
 
+def pick_release(entry, fetch):
+    """Последний выпуск продукта LINEUP. Без приставки - выпуск latest
+    хранилища, с приставкой - новейший опубликованный выпуск с меткой
+    на неё, приставка «v» требует цифру после себя. Без выпуска -
+    LookupError."""
+    repo, prefix = entry[2], entry[3]
+    if not prefix:
+        return fetch(RELEASES.format(repo, "latest"))
+    for release in fetch(RELEASE_LIST.format(repo)):
+        tag = (release.get("tag_name") or "").lower()
+        if (release.get("draft") or release.get("prerelease")
+                or not tag.startswith(prefix)):
+            continue
+        if prefix == "v" and not tag[1:2].isdigit():
+            continue
+        return release
+    raise LookupError(repo + " " + prefix)
+
+
 def post_args(text):
     """Хранилище и метка команды /post: «/post», «/post v1.7.0»,
     «/post isoliner», «/post isoliner v1.2.0», «/post isoliner-scene
@@ -608,26 +684,59 @@ def plugin_of(text):
     return None
 
 
+def lineup_entry(key):
+    """Строка LINEUP по ключу или None."""
+    for entry in LINEUP:
+        if entry[0] == key:
+            return entry
+    return None
+
+
+def lineup_name(entry, lang):
+    """Название продукта: у расширения - «<модуль> для RustGIS»."""
+    if entry[4]:
+        return TEXTS[lang]["extension"].format(product=entry[1],
+                                               version="").strip()
+    return entry[1]
+
+
+def lineup_of(text):
+    """Ключ продукта по слову /latest: ключ или название в любом
+    регистре, иначе None."""
+    word = (text or "").strip().lower()
+    if not word:
+        return None
+    for entry in LINEUP:
+        names = {entry[0], lineup_name(entry, "ru").lower(),
+                 lineup_name(entry, "en").lower()}
+        if word in names:
+            return entry[0]
+    return None
+
+
 def docs_reply(lang):
-    """Список модулей HTML: описание, ссылки на GitHub и каталог."""
+    """Список продуктов HTML: описание, ссылки на GitHub, каталог QGIS,
+    страницу в браузере и на сайте."""
     lines = [html.escape(TEXTS[lang]["docs"])]
-    for key, (name, catalog) in PLUGINS.items():
+    for entry in LINEUP:
+        key, repo, extension = entry[0], entry[2], entry[4]
+        links = ['<a href="https://github.com/{}/{}">GitHub</a>'.format(
+            OWNER, repo)]
+        catalog = None if extension else PLUGINS.get(repo, (None, None))[1]
         if catalog:
-            other = '<a href="{}">{}</a>'.format(
-                catalog, html.escape(TEXTS[lang]["catalog"]))
-        else:
-            other = '<a href="{}">{}</a>'.format(
-                WEB_PAGES[key], html.escape(TEXTS[lang]["web"]))
+            links.append('<a href="{}">{}</a>'.format(
+                catalog, html.escape(TEXTS[lang]["catalog"])))
+        if key in WEB_PAGES:
+            links.append('<a href="{}">{}</a>'.format(
+                WEB_PAGES[key], html.escape(TEXTS[lang]["web"])))
         if key in SITE_PAGES:
-            other += ' · <a href="{}">{}</a>'.format(
+            links.append('<a href="{}">{}</a>'.format(
                 html.escape(urllib.parse.quote(SITE_PAGES[key], safe=":/"),
                             quote=True),
-                html.escape(TEXTS[lang]["on_site"]))
-        lines.append(
-            '\n<b>{}</b> - {}\n<a href="https://github.com/{}/{}">'
-            'GitHub</a> · {}'.format(
-                html.escape(name), html.escape(ABOUT[lang][key]), OWNER,
-                key, other))
+                html.escape(TEXTS[lang]["on_site"])))
+        lines.append('\n<b>{}</b> - {}\n{}'.format(
+            html.escape(lineup_name(entry, lang)),
+            html.escape(ABOUT[lang][key]), " · ".join(links)))
     lines.append('\n<a href="{}">{}</a> · <a href="{}">{}</a>'.format(
         html.escape("{}/blob/main/doc/{}".format(
             REPOSITORY, manual_file(lang)), quote=True),
@@ -673,6 +782,44 @@ def make_bot():
     return Bot(token, owner, channel) if token else None
 
 
+def build_state(build=None, path=None):
+    """Метка выкладки для адреса бота: метка сборки, «dev» у рабочей
+    копии, «mismatch» - бот и данные из разных архивов."""
+    build = BUILD if build is None else build
+    try:
+        with open(path or BUILD_FILE, encoding="utf-8") as f:
+            data = json.load(f).get("build", "")
+    except (OSError, ValueError):
+        data = ""
+    if not build and not data:
+        return "dev"
+    if build == data:
+        return build
+    return "mismatch bot={} data={}".format(build or "-", data or "-")
+
+
+def read_published(path=None):
+    """Опубликованные выпуски «хранилище:метка»."""
+    try:
+        with open(path or PUBLISHED, encoding="utf-8") as f:
+            return {line.strip() for line in f if line.strip()}
+    except OSError:
+        return set()
+
+
+def mark_published(key, path=None):
+    path = path or PUBLISHED
+    folder = os.path.dirname(path)
+    if folder and not os.path.isdir(folder):
+        os.makedirs(folder)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(key + "\n")
+
+
+def published_key(repo, tag):
+    return "{}:{}".format(repo.lower(), tag)
+
+
 def application(environ, start_response):
     """Приложение WSGI для приёма обновлений Telegram (webhook).
 
@@ -683,7 +830,7 @@ def application(environ, start_response):
     if (environ.get("REQUEST_METHOD") != "POST"
             or environ.get("PATH_INFO") != WEBHOOK_PATH):
         start_response("404 Not Found", [("Content-Type", "text/plain")])
-        return [b"PlanetX bot"]
+        return ["PlanetX bot {}".format(build_state()).encode("utf-8")]
     secret = read_settings().get("secret") or ""
     given = environ.get("HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN", "")
     if not secret or not hmac.compare_digest(secret, given):
@@ -713,7 +860,8 @@ class Bot:
         self.owner = owner
         self.channel = channel
         self.index = load_indexes()
-        self.releases = {}  # хранилище - (время, ответ GitHub)
+        self.releases = {}  # ключ продукта - (время, ответ GitHub)
+        self.published = PUBLISHED
 
     def call(self, method, **params):
         body = json.dumps(params).encode("utf-8")
@@ -747,22 +895,38 @@ class Bot:
             params["reply_markup"] = markup
         self.call("sendMessage", **params)
 
-    def latest(self, repo="planetx"):
-        """Последний выпуск хранилища, ответ помнится RELEASE_KEEP."""
-        kept = self.releases.get(repo)
+    def latest(self, key="planetx"):
+        """Последний выпуск продукта LINEUP, ответ помнится RELEASE_KEEP.
+        Без выпусков - LookupError."""
+        kept = self.releases.get(key)
         if kept and time.time() - kept[0] < RELEASE_KEEP:
             return kept[1]
-        release = github(RELEASES.format(repo, "latest"))
-        self.releases[repo] = (time.time(), release)
+        entry = lineup_entry(key) or (key, key, key, "", False)
+        release = pick_release(entry, github)
+        self.releases[key] = (time.time(), release)
         return release
 
-    def show_latest(self, chat, lang, repo):
+    def show_latest(self, chat, lang, key):
+        entry = lineup_entry(key) or (key, key, key, "", False)
         try:
-            text, markup = release_reply(self.latest(repo), lang, repo)
+            release = self.latest(key)
+        except LookupError:
+            release = None
+        except urllib.error.HTTPError as error:
+            if error.code != 404:
+                log("GitHub {}: {}".format(key, error))
+                self.send(chat, TEXTS[lang]["no_release"])
+                return
+            release = None
         except (urllib.error.URLError, OSError, ValueError) as error:
-            log("GitHub {}: {}".format(repo, error))
+            log("GitHub {}: {}".format(key, error))
             self.send(chat, TEXTS[lang]["no_release"])
             return
+        if release is None:
+            self.send(chat, TEXTS[lang]["no_release_yet"].format(
+                name=lineup_name(entry, lang)))
+            return
+        text, markup = release_reply(release, lang, entry[2])
         self.send(chat, text, markup, html_text=True)
 
     def on_message(self, message):
@@ -782,13 +946,14 @@ class Bot:
         elif command == "/docs":
             self.send(chat, docs_reply(lang), html_text=True)
         elif command == "/latest":
-            repo = plugin_of(rest)
-            if repo:
-                self.show_latest(chat, lang, repo)
+            key = lineup_of(rest) or plugin_of(rest)
+            if key:
+                self.show_latest(chat, lang, key)
             else:
                 self.send(chat, TEXTS[lang]["pick"], {"inline_keyboard": [
-                    [{"text": name, "callback_data": "l:" + key}]
-                    for key, (name, _) in PLUGINS.items()]})
+                    [{"text": lineup_name(entry, lang),
+                      "callback_data": "l:" + entry[0]}]
+                    for entry in LINEUP]})
         elif command == "/report":
             self.report(chat, user, lang, rest.strip())
         elif command == "/post" and user.get("id") == self.owner:
@@ -843,16 +1008,24 @@ class Bot:
         self.send(self.owner, text, markup, html_text=True)
 
     def publish(self, repo, tag, query):
-        """Пост о выпуске в канал по кнопке черновика."""
-        try:
-            release = self.release_of(repo, tag)
-            text, markup = release_reply(release, CHANNEL_LANG, repo)
-            self.send(self.channel, text, markup, html_text=True)
-        except (urllib.error.URLError, OSError, RuntimeError,
-                ValueError) as error:
-            self.send(self.owner, "Пост не опубликован: {}".format(error))
-            return
+        """Пост о выпуске в канал по кнопке черновика. Выпуск, уже
+        опубликованный, второй раз не идёт (PUBLISHED)."""
+        key = published_key(repo, tag)
         name = str(self.channel)
+        if key in read_published(self.published):
+            self.send(self.owner, "{} {} уже опубликован в {}, второй пост "
+                      "не отправлен.".format(repo, tag, name))
+        else:
+            try:
+                release = self.release_of(repo, tag)
+                text, markup = release_reply(release, CHANNEL_LANG, repo)
+                self.send(self.channel, text, markup, html_text=True)
+            except (urllib.error.URLError, OSError, RuntimeError,
+                    ValueError) as error:
+                self.send(self.owner, "Пост не опубликован: {}".format(
+                    error))
+                return
+            mark_published(key, self.published)
         link = ("https://t.me/" + name[1:] if name.startswith("@")
                 else REPOSITORY + "/releases")
         message = query["message"]
@@ -880,7 +1053,7 @@ class Bot:
             else:
                 self.draft(repo, tag)
             return
-        if action == "l" and message and rest in PLUGINS:
+        if action == "l" and message and lineup_entry(rest):
             self.show_latest(message["chat"]["id"],
                              language(query.get("from")), rest)
             return
