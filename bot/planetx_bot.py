@@ -26,7 +26,10 @@ channel - канал постов о выпусках (@имя или номер
 пост» в сообщении о выпуске, которое шлёт GitHub Actions
 (.github/workflows/telegram-release.yml). Бот присылает автору
 черновик с кнопкой «Опубликовать», кнопка ставит пост в канал. Кнопки
-и /post действуют только у автора (owner).
+и /post действуют только у автора (owner). Хранилище - любое
+хранилище OWNER: модули линейки, программы и расширения RustGIS
+(метка rustgis-v<версия> или хранилище <модуль>-rustgis, заголовок
+«<продукт> для RustGIS <версия>»).
 
 Ответы:
 - /latest - последний выпуск на GitHub, что нового, архив;
@@ -77,6 +80,14 @@ PLUGINS = {
                   "https://plugins.qgis.org/plugins/repoliner/"),
     "planetx-lite": ("PlanetX Lite", None),
 }
+# Расширения RustGIS. Выпуск с меткой rustgis-v<версия> или из хранилища
+# <модуль>-rustgis - расширение: заголовок «<продукт> для RustGIS
+# <версия>», кнопка файла расширения, без каталога QGIS. Хранилища
+# расширений по одному не перечисляются, новые подхватываются сами.
+RUSTGIS_TAG = "rustgis-v"
+RUSTGIS_REPO = "-rustgis"
+# Файлы выпуска, на которые ставится кнопка, по порядку предпочтения.
+DOWNLOADS = (".rgplugin", ".zip")
 # Слова вопроса, которые ограничивают поиск руководством PlanetX Lite.
 LITE_WORDS = ("lite", "лайт", "лайте", "лайта", "лайтом", "planetx-lite")
 # Страница в браузере у программ без каталога QGIS, для /docs.
@@ -181,6 +192,10 @@ TEXTS = {
         "site": "PlanetX на сайте",
         "latest": "{name} {tag} от {date}",
         "zip": "Архив модуля",
+        "download": "Скачать",
+        "extension_file": "Файл расширения",
+        "extension": "{product} для RustGIS {version}",
+        "titled": "{title} от {date}",
         "catalog": "Каталог QGIS",
         "web": "В браузере",
         "on_site": "На сайте",
@@ -213,6 +228,10 @@ TEXTS = {
         "site": "PlanetX website",
         "latest": "{name} {tag} of {date}",
         "zip": "Plugin archive",
+        "download": "Download",
+        "extension_file": "Extension file",
+        "extension": "{product} for RustGIS {version}",
+        "titled": "{title} of {date}",
         "catalog": "QGIS catalog",
         "web": "In the browser",
         "on_site": "Website",
@@ -435,23 +454,88 @@ def _release_words(part, files):
     return _FILE_NAME.sub(file_name, text)
 
 
-def release_reply(release, lang, repo="planetx"):
-    """Ответ /latest HTML и кнопки по ответу GitHub."""
+def is_extension(repo, tag):
+    """Выпуск расширения RustGIS - по метке или имени хранилища."""
+    return ((tag or "").lower().startswith(RUSTGIS_TAG)
+            or (repo or "").lower().endswith(RUSTGIS_REPO))
+
+
+def version_of(tag):
+    """Версия из метки: rustgis-v0.5.1, v1.2.0 и 1.5.4 - 0.5.1, 1.2.0,
+    1.5.4."""
+    tag = tag or ""
+    if tag.lower().startswith(RUSTGIS_TAG):
+        return tag[len(RUSTGIS_TAG):]
+    return tag[1:] if tag[:1] in "vV" and tag[1:2].isdigit() else tag
+
+
+def product_of(repo):
+    """Название продукта по хранилищу: модуль из PLUGINS, у хранилища
+    расширения - модуль по имени до «-rustgis» (topoliner-rustgis -
+    Topoliner), иначе имя хранилища."""
+    key = (repo or "").lower()
+    if key in PLUGINS:
+        return PLUGINS[key][0]
+    base = key[:-len(RUSTGIS_REPO)] if key.endswith(RUSTGIS_REPO) else key
+    for word in (base, "qgis-" + base):
+        found = plugin_of(word)
+        if found:
+            return PLUGINS[found][0]
+    return repo
+
+
+def release_title(release, lang, repo):
+    """Заголовок поста: модуль - «PlanetX v1.44.1 от дата», расширение
+    и прочие программы - название выпуска на GitHub, если в нём есть
+    версия, иначе «<продукт> для RustGIS <версия>» или «<продукт>
+    <версия>»."""
     tag = release.get("tag_name", "")
     date = (release.get("published_at") or "")[:10]
+    extension = is_extension(repo, tag)
+    if repo.lower() in PLUGINS and not extension:
+        return TEXTS[lang]["latest"].format(
+            name=PLUGINS[repo.lower()][0], tag=tag, date=date)
+    version = version_of(tag)
+    title = (release.get("name") or "").strip()
+    if not title or version not in title:
+        product = product_of(repo)
+        title = (TEXTS[lang]["extension"].format(product=product,
+                                                 version=version)
+                 if extension else "{} {}".format(product, version))
+    return TEXTS[lang]["titled"].format(title=title, date=date)
+
+
+def download_of(release):
+    """Файл выпуска для кнопки: файл расширения, иначе архив."""
+    assets = release.get("assets") or ()
+    for ending in DOWNLOADS:
+        for asset in assets:
+            if (asset.get("name", "").lower().endswith(ending)
+                    and asset.get("browser_download_url")):
+                return asset["browser_download_url"], ending
+    return None, None
+
+
+def release_reply(release, lang, repo="planetx"):
+    """Ответ /latest и пост о выпуске HTML и кнопки по ответу GitHub."""
+    tag = release.get("tag_name", "")
     body = release_html(cut(release.get("body") or "", 2500),
                         release.get("assets") or ())
-    name, catalog = PLUGINS.get(repo.lower(), (repo, None))
+    extension = is_extension(repo, tag)
+    catalog = None if extension else PLUGINS.get(repo.lower(),
+                                                 (repo, None))[1]
     text = "<b>{}</b>\n\n{}".format(
-        html.escape(TEXTS[lang]["latest"].format(
-            name=name, tag=tag, date=date)),
-        body)
+        html.escape(release_title(release, lang, repo)), body)
     buttons = []
-    for asset in release.get("assets") or ():
-        if asset.get("name", "").endswith(".zip"):
-            buttons.append([{"text": TEXTS[lang]["zip"],
-                             "url": asset["browser_download_url"]}])
-            break
+    url, ending = download_of(release)
+    if url:
+        if extension or ending == ".rgplugin":
+            label = TEXTS[lang]["extension_file"]
+        elif repo.lower() in PLUGINS:
+            label = TEXTS[lang]["zip"]
+        else:
+            label = TEXTS[lang]["download"]
+        buttons.append([{"text": label, "url": url}])
     if catalog:
         buttons.append([{"text": TEXTS[lang]["catalog"], "url": catalog}])
     return text, {"inline_keyboard": buttons}
@@ -468,10 +552,11 @@ def github(url):
 
 def post_args(text):
     """Хранилище и метка команды /post: «/post», «/post v1.7.0»,
-    «/post isoliner», «/post isoliner v1.2.0»."""
+    «/post isoliner», «/post isoliner v1.2.0», «/post isoliner-scene
+    rustgis-v0.5.1»."""
     repo, tag = "planetx", None
     for word in text.split():
-        if re.match(r"v?\d", word):
+        if re.match(r"v?\d", word) or word.lower().startswith(RUSTGIS_TAG):
             tag = word
         elif _REPO.fullmatch(word):
             repo = word
