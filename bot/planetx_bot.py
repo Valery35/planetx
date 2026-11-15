@@ -86,6 +86,13 @@ PLUGINS = {
 # расширений по одному не перечисляются, новые подхватываются сами.
 RUSTGIS_TAG = "rustgis-v"
 RUSTGIS_REPO = "-rustgis"
+# Хранилища, у которых имя не даёт продукт: своя программа по меткам v*
+# и модуль, чьё расширение RustGIS выходит там же по меткам rustgis-v*.
+PRODUCTS = {
+    "isoliner-scene": ("Isoliner Scene", "Isoliner3D"),
+}
+# Предел callback_data кнопки Telegram, байт.
+CALLBACK_LIMIT = 64
 # Файлы выпуска, на которые ставится кнопка, по порядку предпочтения.
 DOWNLOADS = (".rgplugin", ".zip")
 # Слова вопроса, которые ограничивают поиск руководством PlanetX Lite.
@@ -469,11 +476,14 @@ def version_of(tag):
     return tag[1:] if tag[:1] in "vV" and tag[1:2].isdigit() else tag
 
 
-def product_of(repo):
-    """Название продукта по хранилищу: модуль из PLUGINS, у хранилища
-    расширения - модуль по имени до «-rustgis» (topoliner-rustgis -
-    Topoliner), иначе имя хранилища."""
+def product_of(repo, extension=False):
+    """Название продукта по хранилищу: запись PRODUCTS (программа или
+    модуль расширения), модуль из PLUGINS, у хранилища расширения -
+    модуль по имени до «-rustgis» (topoliner-rustgis - Topoliner),
+    иначе имя хранилища."""
     key = (repo or "").lower()
+    if key in PRODUCTS:
+        return PRODUCTS[key][1 if extension else 0]
     if key in PLUGINS:
         return PLUGINS[key][0]
     base = key[:-len(RUSTGIS_REPO)] if key.endswith(RUSTGIS_REPO) else key
@@ -498,7 +508,7 @@ def release_title(release, lang, repo):
     version = version_of(tag)
     title = (release.get("name") or "").strip()
     if not title or version not in title:
-        product = product_of(repo)
+        product = product_of(repo, extension)
         title = (TEXTS[lang]["extension"].format(product=product,
                                                  version=version)
                  if extension else "{} {}".format(product, version))

@@ -74,6 +74,23 @@ class TestExtensions(unittest.TestCase):
                          "<b>Isoliner Scene 0.4.0 от 2026-11-14</b>")
         self.assertEqual(markup["inline_keyboard"][0][0]["text"], "Скачать")
 
+    def test_one_repo_gives_program_and_extension(self):
+        for tag, title in (("v0.4.0", "Isoliner Scene 0.4.0"),
+                           ("rustgis-v0.5.1", "Isoliner3D для RustGIS 0.5.1")):
+            text, _ = bot.release_reply(release(tag), "ru", "isoliner-scene")
+            self.assertEqual(head(text),
+                             "<b>{} от 2026-11-14</b>".format(title))
+
+    def test_callback_fits_telegram_limit(self):
+        for repo in ("isoliner-scene", "isoliner-rustgis",
+                     "topoliner-rustgis", "routeliner-rustgis",
+                     "repoliner-rustgis", "qgis-isoliner3d"):
+            for tag in ("rustgis-v10.20.30", "v10.20.30"):
+                data = "draft:{}:{}".format(repo, tag)
+                self.assertLessEqual(len(data.encode("utf-8")),
+                                     bot.CALLBACK_LIMIT, data)
+                self.assertTrue(bot._REPO.fullmatch(repo))
+
     def test_post_args_extension_tag(self):
         self.assertEqual(bot.post_args("isoliner-scene rustgis-v0.5.1"),
                          ("isoliner-scene", "rustgis-v0.5.1"))
