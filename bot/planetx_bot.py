@@ -160,9 +160,13 @@ ABOUT = {
                             "декластеризация, вариограммы, кросс-проверка",
         "topoliner-rustgis": "топология линий и полигонов Topoliner "
                              "в RustGIS",
-        # Заглушка до описания от сессии Routeliner.
-        "routeliner-rustgis": "события на трассе и пикетаж Routeliner "
-                              "в RustGIS",
+        "routeliner-rustgis": "события на маршрутах и пикетаж "
+                              "с пикетажными уравнениями в RustGIS, восемь "
+                              "инструментов модуля QGIS Routeliner на своей "
+                              "вкладке ленты - сборка и калибровка "
+                              "маршрутов, точечные события и участки, "
+                              "пикетная разбивка, привязка точек к трассе "
+                              "и продольный профиль",
     },
     "en": {
         "planetx": "a 3D globe inside QGIS",
@@ -183,9 +187,13 @@ ABOUT = {
                             "variograms, cross-validation",
         "topoliner-rustgis": "Topoliner topology of lines and polygons "
                              "in RustGIS",
-        # Заглушка до описания от сессии Routeliner.
-        "routeliner-rustgis": "Routeliner route events and chainage "
-                              "in RustGIS",
+        "routeliner-rustgis": "route events and chainage with station "
+                              "equations in RustGIS, eight tools of the "
+                              "QGIS plugin Routeliner on their own ribbon "
+                              "tab - building and calibrating routes, point "
+                              "and linear events, stationing, snapping "
+                              "points to the route and the longitudinal "
+                              "profile",
     },
 }
 _REPO = re.compile(r"[A-Za-z0-9_.-]{1,40}")
