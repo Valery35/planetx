@@ -132,6 +132,18 @@ class TestTriangulate(unittest.TestCase):
         # 0.01° долготы на 58° - около 590 м.
         self.assertAlmostEqual(abs(xy[1, 0] - xy[0, 0]), 590.0, delta=5.0)
 
+    def test_plane_across_dateline(self):
+        # Кольцо 10° × 5° через 180-й меридиан шириной как такое же
+        # у 10° в. д., около 426 км. Простое среднее долгот давало
+        # 14 910 км.
+        cross = ft.plane([(65.0, 175.0), (65.0, -175.0),
+                          (70.0, -175.0), (70.0, 175.0)])
+        same = ft.plane([(65.0, 5.0), (65.0, 15.0),
+                         (70.0, 15.0), (70.0, 5.0)])
+        width = np.ptp(cross[:, 0])
+        self.assertAlmostEqual(width, np.ptp(same[:, 0]), delta=1.0)
+        self.assertAlmostEqual(width / 1000.0, 426.0, delta=5.0)
+
 
 class TestHeightSlider(unittest.TestCase):
 

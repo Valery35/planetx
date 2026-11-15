@@ -340,9 +340,13 @@ def shape_grid(points, radius, reach=3.0, least=2000.0, most=50000.0):
     и не больше most метров. points - (широта, долгота)."""
     pts = np.radians(np.asarray(points, dtype=np.float64))
     lat0 = float(np.mean(pts[:, 0]))
-    lon0 = float(np.mean(pts[:, 1]))
+    # Средняя долгота по кругу, разность - через шов: у метки через
+    # 180-й меридиан простое среднее уводило квадрат на другую сторону.
+    lon0 = math.atan2(float(np.sin(pts[:, 1]).mean()),
+                      float(np.cos(pts[:, 1]).mean()))
     north = (pts[:, 0] - lat0) * radius
-    east = (pts[:, 1] - lon0) * radius * math.cos(lat0)
+    dlon = (pts[:, 1] - lon0 + math.pi) % (2.0 * math.pi) - math.pi
+    east = dlon * radius * math.cos(lat0)
     half = float(max(np.abs(north).max(), np.abs(east).max()))
     side = min(max(half * reach, least), most)
     return math.degrees(lat0), math.degrees(lon0), side

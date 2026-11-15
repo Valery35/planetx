@@ -428,11 +428,21 @@ def _area2(p):
     return float(np.dot(x, np.roll(y, -1)) - np.dot(np.roll(x, -1), y))
 
 
+def mean_lon(lons):
+    """Средняя долгота по кругу, градусы. Простое среднее у кольца
+    через 180-й меридиан (175° и -175°) давало 0° - касательная
+    плоскость вставала на другой стороне Земли, заливка у шва
+    расползалась на 15 тысяч километров."""
+    rad = np.radians(np.asarray(lons, dtype=np.float64))
+    return math.degrees(math.atan2(float(np.sin(rad).mean()),
+                                   float(np.cos(rad).mean())))
+
+
 def plane(latlon):
     """Точки в касательной плоскости у середины, метры (n, 2)."""
     latlon = np.asarray(latlon, dtype=np.float64)
     lat0 = float(latlon[:, 0].mean())
-    lon0 = float(latlon[:, 1].mean())
+    lon0 = mean_lon(latlon[:, 1])
     dlon = (latlon[:, 1] - lon0 + 180.0) % 360.0 - 180.0
     x = np.radians(dlon) * ellipsoid.A * math.cos(math.radians(lat0))
     y = np.radians(latlon[:, 0] - lat0) * ellipsoid.A

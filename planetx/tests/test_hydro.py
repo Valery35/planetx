@@ -295,6 +295,15 @@ class TestFlow(unittest.TestCase):
         self.assertAlmostEqual(side, 3 * 0.1 * math.pi / 180.0 * R,
                                delta=1.0)
 
+    def test_shape_grid_across_dateline(self):
+        # Путь через 180-й меридиан - середина у шва, квадрат своего
+        # размера. Простое среднее долгот ставило середину на 0°.
+        lat, lon, side = hydro.shape_grid([(60.0, 179.95),
+                                           (60.0, -179.95)], R)
+        self.assertGreater(abs(lon), 179.9)
+        east = 0.05 * math.pi / 180.0 * R * math.cos(math.radians(60.0))
+        self.assertAlmostEqual(side, max(3 * east, 2000.0), delta=1.0)
+
     def test_simplify_keeps_corners_on_line_of_ring_ends(self):
         # Кольцо начинается посередине длинной стороны, концы цепочки
         # соседние. Дуглас-Пекер до прямой через них выбрасывал углы на
