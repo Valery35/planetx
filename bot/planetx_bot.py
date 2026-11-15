@@ -91,6 +91,16 @@ RUSTGIS_REPO = "-rustgis"
 PRODUCTS = {
     "isoliner-scene": ("Isoliner Scene", "Isoliner3D"),
 }
+# Хранилища, все выпуски которых - расширения RustGIS, хотя в имени нет
+# «-rustgis», а метки - v<версия>. Значение - название продукта.
+EXTENSION_REPOS = {
+    "rustplanetx": "RustPlanetX",
+}
+# Пакет для одной системы: окончание имени файла перед расширением.
+_PLATFORM = re.compile(
+    r"[-_](windows|win64|win32|win|linux|macos|mac|darwin)"
+    r"([-_][\w.]+)?\.\w+$", re.IGNORECASE)
+_WINDOWS = re.compile(r"[-_]win", re.IGNORECASE)
 # Предел callback_data кнопки Telegram, байт.
 CALLBACK_LIMIT = 64
 # Файлы выпуска, на которые ставится кнопка, по порядку предпочтения.
@@ -462,9 +472,11 @@ def _release_words(part, files):
 
 
 def is_extension(repo, tag):
-    """Выпуск расширения RustGIS - по метке или имени хранилища."""
+    """Выпуск расширения RustGIS - по метке rustgis-v*, по хранилищу
+    <модуль>-rustgis или по записи EXTENSION_REPOS."""
+    key = (repo or "").lower()
     return ((tag or "").lower().startswith(RUSTGIS_TAG)
-            or (repo or "").lower().endswith(RUSTGIS_REPO))
+            or key.endswith(RUSTGIS_REPO) or key in EXTENSION_REPOS)
 
 
 def version_of(tag):
@@ -482,6 +494,8 @@ def product_of(repo, extension=False):
     модуль по имени до «-rustgis» (topoliner-rustgis - Topoliner),
     иначе имя хранилища."""
     key = (repo or "").lower()
+    if key in EXTENSION_REPOS:
+        return EXTENSION_REPOS[key]
     if key in PRODUCTS:
         return PRODUCTS[key][1 if extension else 0]
     if key in PLUGINS:
@@ -507,7 +521,10 @@ def release_title(release, lang, repo):
             name=PLUGINS[repo.lower()][0], tag=tag, date=date)
     version = version_of(tag)
     title = (release.get("name") or "").strip()
-    if not title or version not in title:
+    # Название из одной версии («v0.6.1») продукта не называет.
+    bare = re.sub(r"(?i)(rustgis-)?v?" + re.escape(version), "",
+                  title).strip(" -")
+    if not title or version not in title or not bare:
         product = product_of(repo, extension)
         title = (TEXTS[lang]["extension"].format(product=product,
                                                  version=version)
@@ -516,13 +533,21 @@ def release_title(release, lang, repo):
 
 
 def download_of(release):
-    """Файл выпуска для кнопки: файл расширения, иначе архив."""
-    assets = release.get("assets") or ()
+    """Файл выпуска для кнопки: файл расширения, иначе архив. Из
+    нескольких файлов одного вида - общий, без окончания системы
+    (-windows, -linux, -macos), без общего - пакет Windows, иначе
+    первый."""
+    assets = [a for a in release.get("assets") or ()
+              if a.get("browser_download_url")]
     for ending in DOWNLOADS:
-        for asset in assets:
-            if (asset.get("name", "").lower().endswith(ending)
-                    and asset.get("browser_download_url")):
-                return asset["browser_download_url"], ending
+        found = [a for a in assets
+                 if a.get("name", "").lower().endswith(ending)]
+        if not found:
+            continue
+        common = [a for a in found if not _PLATFORM.search(a["name"])]
+        windows = [a for a in found if _WINDOWS.search(a["name"])]
+        best = (common or windows or found)[0]
+        return best["browser_download_url"], ending
     return None, None
 
 

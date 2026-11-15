@@ -81,6 +81,35 @@ class TestExtensions(unittest.TestCase):
             self.assertEqual(head(text),
                              "<b>{} от 2026-11-14</b>".format(title))
 
+    def test_extension_repo_outside_rule(self):
+        names = ["rustplanetx-0.6.1-linux.rgplugin",
+                 "rustplanetx-0.6.1-macos.rgplugin",
+                 "rustplanetx-0.6.1-windows.rgplugin",
+                 "rustplanetx-0.6.1.rgplugin"]
+        text, markup = bot.release_reply(
+            release("v0.6.1", "v0.6.1", names), "ru", "rustplanetx")
+        self.assertEqual(head(text),
+                         "<b>RustPlanetX для RustGIS 0.6.1 от 2026-11-14</b>")
+        button = markup["inline_keyboard"][0][0]
+        self.assertEqual(button["text"], "Файл расширения")
+        self.assertTrue(button["url"].endswith("rustplanetx-0.6.1.rgplugin"))
+
+    def test_bare_version_name_is_not_title(self):
+        for name in ("v0.2.0", "0.2.0", "rustgis-v0.2.0"):
+            text, _ = bot.release_reply(release("v0.2.0", name), "ru",
+                                        "topoliner-rustgis")
+            self.assertEqual(head(text), "<b>Topoliner для RustGIS 0.2.0 от "
+                             "2026-11-14</b>")
+
+    def test_platform_packages_without_common(self):
+        url, _ = bot.download_of(release("v1.0.0", assets=[
+            "x-1.0.0-linux.rgplugin", "x-1.0.0-macos.rgplugin",
+            "x-1.0.0-windows.rgplugin"]))
+        self.assertTrue(url.endswith("-windows.rgplugin"))
+        url, _ = bot.download_of(release("v1.0.0", assets=[
+            "x-1.0.0-linux.rgplugin", "x-1.0.0-macos.rgplugin"]))
+        self.assertTrue(url.endswith("-linux.rgplugin"))
+
     def test_callback_fits_telegram_limit(self):
         for repo in ("isoliner-scene", "isoliner-rustgis",
                      "topoliner-rustgis", "routeliner-rustgis",
