@@ -131,6 +131,7 @@ LINEUP = (
      True),
     ("isoliner-rustgis", "Isoliner", "isoliner-rustgis", "", True),
     ("topoliner-rustgis", "Topoliner", "topoliner-rustgis", "", True),
+    ("routeliner-rustgis", "Routeliner", "routeliner-rustgis", "", True),
 )
 # Страницы программ на сайте www.informpp.ru, для /docs.
 SITE_PAGES = {
@@ -159,6 +160,9 @@ ABOUT = {
                             "декластеризация, вариограммы, кросс-проверка",
         "topoliner-rustgis": "топология линий и полигонов Topoliner "
                              "в RustGIS",
+        # Заглушка до описания от сессии Routeliner.
+        "routeliner-rustgis": "события на трассе и пикетаж Routeliner "
+                              "в RustGIS",
     },
     "en": {
         "planetx": "a 3D globe inside QGIS",
@@ -179,6 +183,9 @@ ABOUT = {
                             "variograms, cross-validation",
         "topoliner-rustgis": "Topoliner topology of lines and polygons "
                              "in RustGIS",
+        # Заглушка до описания от сессии Routeliner.
+        "routeliner-rustgis": "Routeliner route events and chainage "
+                              "in RustGIS",
     },
 }
 _REPO = re.compile(r"[A-Za-z0-9_.-]{1,40}")

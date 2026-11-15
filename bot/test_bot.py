@@ -201,7 +201,8 @@ class TestLineup(unittest.TestCase):
         docs = bot.docs_reply("ru")
         for name in ("Isoliner Scene", "RustPlanetX",
                      "Isoliner3D для RustGIS", "Isoliner для RustGIS",
-                     "Topoliner для RustGIS", "PlanetX Lite"):
+                     "Topoliner для RustGIS", "Routeliner для RustGIS",
+                     "PlanetX Lite"):
             self.assertIn(name, docs)
         self.assertIn("valery35.github.io/isoliner-scene", docs)
 
