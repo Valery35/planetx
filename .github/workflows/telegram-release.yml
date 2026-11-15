@@ -6,11 +6,19 @@
 # всех модулей линейки и расширений RustGIS, имя хранилища бот берёт
 # из кнопки. Расширение бот узнаёт по метке rustgis-v<версия> или по
 # хранилищу <модуль>-rustgis.
+# Запуск - выпуск опубликован (сразу или из черновика; черновик и
+# предварительный выпуск без публикации кнопку не дают) и вручную:
+# Actions - «Telegram о выпуске» - Run workflow, поле - метка выпуска.
 name: Telegram о выпуске
 
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Метка выпуска, например v1.2.0 или rustgis-v0.5.1
+        required: true
 
 jobs:
   notify:
@@ -20,9 +28,9 @@ jobs:
         env:
           TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           OWNER: ${{ secrets.TELEGRAM_OWNER }}
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
           REPO: ${{ github.event.repository.name }}
-          URL: ${{ github.event.release.html_url }}
+          URL: ${{ github.event.release.html_url || format('{0}/{1}/releases/tag/{2}', github.server_url, github.repository, inputs.tag) }}
         run: |
           if [ -z "$TOKEN" ] || [ -z "$OWNER" ]; then
             echo "Секреты TELEGRAM_BOT_TOKEN и TELEGRAM_OWNER не заданы"
