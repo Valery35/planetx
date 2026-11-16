@@ -16,6 +16,8 @@
 - тексты для пользователя (tools/check_texts.py) - находки идут
   замечанием и проверку не останавливают, в старых текстах есть
   и ложные находки, двоеточия подписей источников;
+- новые тексты с прошлого выпуска (check_texts.py --new --strict) -
+  находка в изменённом с метки выпуска - ошибка проверки;
 - набор шагов SMOKE файла tools/qgis_check_steps.py в отдельных
   профилях QGIS 4 и QGIS 3 по очереди (PLANETX_STEPS=smoke).
 
@@ -60,6 +62,7 @@ def run(title, args, timeout=900, keep=None):
         return False, "{}: срок {} с вышел".format(title, timeout)
     lines = (done.stdout + done.stderr).strip().splitlines()
     chosen = [line for line in lines if keep and line.startswith(keep)]
+    chosen = chosen[:20]
     tail = "\n".join(chosen or lines[-4:])
     seconds = time.monotonic() - started
     return done.returncode == 0, "{} ({:.0f} с)\n{}".format(
@@ -166,6 +169,17 @@ def main(argv):
                    [py, os.path.join("tools", "check_texts.py"),
                     "--strict"] + list(USER_TEXTS), keep="Находок")
     print(("ПРОШЛА  " if ok else "ЗАМЕЧАНИЕ  ") + text + "\n", flush=True)
+    # Новое с прошлого выпуска меряется строго: находка в нём - ошибка
+    # выпуска, а не замечание. Нет git или метки - тоже ошибка, пустой
+    # проверки не бывает (tools/TEXTS.md, ключ --new).
+    ok, text = run("Новые тексты с прошлого выпуска",
+                   [py, os.path.join("tools", "check_texts.py"),
+                    "--new", "--strict"],
+                   keep=("Только", "Метки", "Находок", "  ",
+                         "Проверка текстов --new"))
+    print(("ПРОШЛА  " if ok else "ОШИБКА  ") + text + "\n", flush=True)
+    if not ok:
+        failed.append("Новые тексты")
     for key in keys:
         ok, text = run_qgis(key)
         print(("ПРОШЛА  " if ok else "ОШИБКА  ") + text + "\n", flush=True)

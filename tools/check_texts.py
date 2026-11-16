@@ -137,6 +137,10 @@ def help_strings():
     return out
 
 
+# Замечания прогона --new, которые печатаются в его начале.
+NOTES = []
+
+
 class NewError(Exception):
     """--new проверить изменённое не может: нет git, метки или основания.
     Прогон тогда кончается отказом, а не пустой проверкой."""
@@ -179,6 +183,15 @@ def new_base(wanted):
     if wanted:
         git("rev-parse", "--verify", wanted + "^{commit}")
         return wanted
+    del NOTES[:]
+    # Метка, выпущенная на GitHub и не полученная, не видна, и основанием
+    # тихо станет прежняя. Поэтому метки берутся перед каждым прогоном.
+    # Без сети прогон идёт по меткам рабочей копии и говорит об этом.
+    try:
+        git("fetch", "--tags", "--quiet", "origin")
+    except NewError as error:
+        NOTES.append("Метки с GitHub не получены, основание - по меткам "
+                     "рабочей копии (%s)." % str(error).splitlines()[-1])
     try:
         return git("describe", "--tags", "--abbrev=0", "--match", "v*",
                    "HEAD").strip()
@@ -398,6 +411,8 @@ def main(argv):
         print("Только изменённое с %s: файлов markdown %d, подсказок %d. "
               "Ритм не меряется, его меряет полный прогон."
               % (base, files, helps))
+        for note in NOTES:
+            print(note)
         print("")
     if problems:
         print("Находок: %d" % len(problems))
