@@ -53,8 +53,16 @@ class TestRhythm(unittest.TestCase):
         self.assertEqual(check_texts.band_of("site/posts_1.44.1_social.md"),
                          "letter")
         self.assertEqual(check_texts.band_of("doc/MANUAL.md"), "note")
-        # README - полосой письма, решение автора от 16 ноября 2026 года.
-        self.assertEqual(check_texts.band_of("README.ru.md"), "letter")
+        # README - ритм не меряется, только длина (свод линейки).
+        self.assertEqual(check_texts.band_of("README.ru.md"),
+                         check_texts.LENGTH_ONLY)
+
+    def test_length_only_keeps_length(self):
+        text = " ".join("Глобус открыт сразу." for _ in range(12))
+        long_one = " ".join(["слово"] * 40) + ". "
+        found = findings(long_one + text, band=check_texts.LENGTH_ONLY)
+        self.assertIn("длина", found)
+        self.assertNotIn("ритм", found)
         self.assertEqual(check_texts.band_of("doc/PLAN_PHASE1.md"),
                          "register")
         # Рабочий свод - записи с перечнями, ритм и длина не меряются.

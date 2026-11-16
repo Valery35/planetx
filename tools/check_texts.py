@@ -51,11 +51,12 @@ STOP_WHOLE = ("прямо",)
 # Полоса ритма measure.py по виду текста - таблица свода линейки
 # C:\Dev\workplace\TEXTS.md, первое подходящее правило пути. Роспись -
 # tools/TEXTS.md. Ключ --band задаёт одну полосу всем файлам прогона.
+LENGTH_ONLY = "length"
 BANDS = (
     (r"^AGENTS\.md$", None),
+    (r"^README", LENGTH_ONLY),
     (r"^CHANGELOG", "letter"),
     (r"^site[/\\]posts_", "letter"),
-    (r"^README", "letter"),
     (r"^doc[/\\]PLAN_", "register"),
     (r"DEPLOY", "register"),
     (r".", "note"),
@@ -64,7 +65,7 @@ BANDS = (
 
 def band_of(name):
     """Полоса ритма файла по пути от корня хранилища, None - ритм
-    и длина не меряются."""
+    и длина не меряются, LENGTH_ONLY - меряется только длина."""
     for pattern, band in BANDS:
         if re.search(pattern, name):
             return band
@@ -152,11 +153,16 @@ def check_prose(where, text, problems, russian=True, band=None,
         found += measure.check_words(pairs, lang)
     stats = None
     if band:
-        stats, rhythm = measure.check_rhythm(pairs, lang, band)
-        # У английских текстов своих полос у линейки пока нет (свод
-        # C:\Dev\workplace\TEXTS.md), меряется только длина.
+        length_only = band == LENGTH_ONLY or not russian
+        stats, rhythm = measure.check_rhythm(
+            pairs, lang, "note" if band == LENGTH_ONLY else band)
+        # У английских текстов своих полос у линейки пока нет, ритм
+        # README не меряется вовсе (свод C:\Dev\workplace\TEXTS.md) -
+        # меряется только длина.
         found += [f for f in rhythm
-                  if russian or not f[1].startswith("ритм")]
+                  if not (length_only and f[1].startswith("ритм"))]
+        if band == LENGTH_ONLY:
+            stats = None
     for level, kind, detail in found:
         if level == "error" or kind == "двоеточие внутри предложения":
             problems.append((where, detail, kind.split(" / ")[0]))
@@ -178,7 +184,8 @@ def main(argv):
             forced = arg.split("=", 1)[1]
         else:
             rest.append(arg)
-    if forced is not None and forced not in measure.BANDS["ru"]:
+    if forced is not None and forced not in measure.BANDS["ru"] \
+            and forced != LENGTH_ONLY:
         raise SystemExit("Полоса --band - одна из: %s" % ", ".join(
             measure.BANDS["ru"]))
     targets = [a for a in rest if not a.startswith("--")]
