@@ -117,6 +117,53 @@ class TestLines(unittest.TestCase):
         self.assertEqual(where["длина"], "x.md:7")
 
 
+class TestNew(unittest.TestCase):
+    """--new - только изменённое с метки выпуска."""
+
+    TEXT = ("# Заголовок\n\n"
+            "Старый абзац; с точкой с запятой.\n\n"
+            "Новый абзац; тоже с точкой с запятой.\n"
+            "Его продолжение второй строкой.\n\n"
+            + " ".join(["слово"] * 40) + ".\n")
+
+    def found(self, changed):
+        problems = []
+        check_texts.check_prose("x.md", self.TEXT, problems, band="note",
+                                lines=True, changed=changed)
+        return problems
+
+    def test_only_changed_paragraph(self):
+        # Изменена вторая строка нового абзаца - абзац меряется целиком,
+        # старый - нет.
+        places = [place for place, _, _ in self.found({6})]
+        self.assertEqual(places, ["x.md:5"])
+
+    def test_length_kept_rhythm_dropped(self):
+        text = " ".join("Глобус открыт сразу." for _ in range(12))
+        problems = []
+        check_texts.check_prose("y.md", text, problems, band="note",
+                                lines=True, changed={1})
+        self.assertNotIn("ритм", [r for _, _, r in problems])
+        self.assertEqual([r for _, _, r in self.found({8})], ["длина"])
+
+    def test_nothing_changed_nothing_found(self):
+        self.assertEqual(self.found(set()), [])
+
+    def test_no_tag_is_refusal(self):
+        # Без метки выпуска прогон отказывает, а не проверяет ничего.
+        def no_tag(*args):
+            raise check_texts.NewError("нет метки")
+        saved = check_texts.git
+        check_texts.git = no_tag
+        try:
+            with self.assertRaises(check_texts.NewError) as caught:
+                check_texts.new_base("")
+            self.assertIn("--new=", str(caught.exception))
+            self.assertEqual(check_texts.main(["--new"]), 2)
+        finally:
+            check_texts.git = saved
+
+
 class TestProse(unittest.TestCase):
 
     def test_long_dash(self):

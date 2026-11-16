@@ -11,6 +11,13 @@
     python tools/check_texts.py AGENTS.md doc    выбранные файлы и папки
     python tools/check_texts.py --strict         код возврата 1 при находках
     python tools/check_texts.py --band letter X  одна полоса ритма всем
+    python tools/check_texts.py --new            изменённое с метки выпуска
+    python tools/check_texts.py --new=<коммит>   изменённое с коммита
+
+--new меряет только абзацы, пункты и подсказки, задетые изменением
+с последней метки v* (и несохранённые правки). Ритм тогда не меряется,
+длина, пунктуация и слова меряются. Нет git или метки - код 2 и
+причина: прогон не проверяет молча ничего.
 
 Markdown разбирает measure.py - заголовки, таблицы, код и цитаты
 предложениями не считаются, строки перечня идут отдельно.
@@ -125,7 +132,98 @@ def help_strings():
                 text = literal_text(node.args[0]) if node.args else None
                 if text is not None:
                     out.append((os.path.relpath(path, ROOT), "setHelp",
-                                node.lineno, text))
+                                node.lineno, text,
+                                getattr(node, "end_lineno", node.lineno)))
+    return out
+
+
+class NewError(Exception):
+    """--new проверить изменённое не может: нет git, метки или основания.
+    Прогон тогда кончается отказом, а не пустой проверкой."""
+
+
+def git_program():
+    """git из PATH, иначе из GitHub Desktop - у автора git не в PATH.
+    Папку app-* берём самую свежую по дате: по имени app-3.6.9 встаёт
+    после app-3.6.11."""
+    import shutil
+    found = shutil.which("git")
+    if found:
+        return found
+    base = os.path.join(os.environ.get("LOCALAPPDATA", ""), "GitHubDesktop")
+    paths = []
+    if os.path.isdir(base):
+        for name in os.listdir(base):
+            exe = os.path.join(base, name, "resources", "app", "git", "cmd",
+                               "git.exe")
+            if name.startswith("app-") and os.path.exists(exe):
+                paths.append(exe)
+    if not paths:
+        raise NewError("git не найден ни в PATH, ни в папке GitHub Desktop.")
+    return max(paths, key=os.path.getmtime)
+
+
+def git(*args):
+    import subprocess
+    done = subprocess.run([git_program()] + list(args), cwd=ROOT,
+                          capture_output=True, text=True, encoding="utf-8")
+    if done.returncode:
+        raise NewError("git %s: %s" % (" ".join(args),
+                                         done.stderr.strip()))
+    return done.stdout
+
+
+def new_base(wanted):
+    """Основание --new: заданный коммит или метка, иначе последняя метка
+    выпуска v* перед HEAD."""
+    if wanted:
+        git("rev-parse", "--verify", wanted + "^{commit}")
+        return wanted
+    try:
+        return git("describe", "--tags", "--abbrev=0", "--match", "v*",
+                   "HEAD").strip()
+    except NewError:
+        raise NewError("Метки выпуска v* перед HEAD нет - выпуска ещё не "
+                       "было или метки не получены. Задайте основание "
+                       "--new=<коммит> или запустите полный прогон.")
+
+
+def changed_lines(base):
+    """Изменённые с основания строки по файлам: {путь: множество номеров}.
+    Берутся и несохранённые в коммит правки. Новый файл вне git - весь."""
+    out = {}
+    path = None
+    for line in git("diff", "-U0", "--no-color", "--no-renames", base,
+                    "--").splitlines():
+        if line.startswith("+++ "):
+            name = line[4:]
+            path = None if name == "/dev/null" else os.path.normpath(
+                name[2:] if name.startswith("b/") else name)
+        elif line.startswith("@@") and path:
+            match = re.match(r"@@ -\S+ \+(\d+)(?:,(\d+))? @@", line)
+            start, count = int(match.group(1)), int(match.group(2) or 1)
+            out.setdefault(path, set()).update(range(start, start + count))
+    for name in git("ls-files", "--others", "--exclude-standard").splitlines():
+        full = os.path.join(ROOT, name)
+        if os.path.isfile(full):
+            with open(full, encoding="utf-8", errors="replace") as fh:
+                count = len(fh.read().splitlines())
+            out[os.path.normpath(name)] = set(range(1, count + 1))
+    return out
+
+
+def spans(rows, text):
+    """Строки, которые занимает абзац или пункт каждого предложения:
+    от его начала до пустой строки или начала следующего."""
+    lines = text.splitlines()
+    starts = sorted({line for *_, line in rows if line})
+    out = {}
+    for i, start in enumerate(starts):
+        last = starts[i + 1] - 1 if i + 1 < len(starts) else len(lines)
+        end = start
+        while end < last and lines[end].strip():
+            end += 1
+        out[start] = range(start, end + 1)
     return out
 
 
@@ -155,15 +253,23 @@ def own_words(text):
 
 
 def check_prose(where, text, problems, russian=True, band=None,
-                lexicon=True, lines=False):
+                lexicon=True, lines=False, changed=None):
     """Проза одного текста. measure.py - пунктуация, общие стоп-слова
     и при заданной полосе ритм и длина, здесь - свои слова. Находки -
     тройки место, цитата, суть. При lines место - «файл:строка», строка -
     начало абзаца или пункта перечня с находкой (measure.sentences_at).
     Находки ритма относятся ко всему тексту и идут без строки.
+
+    changed - изменённые строки (--new): меряются только предложения
+    абзацев и пунктов, задетых изменением. Ритм на нескольких
+    предложениях - шум, поэтому он тогда не меряется, длина меряется.
     Возвращает сводку ритма или None."""
     lang = "ru" if russian else "en"
     rows = measure.sentences_at(text)
+    if changed is not None:
+        reach = spans(rows, text)
+        rows = [row for row in rows
+                if row[3] and changed.intersection(reach[row[3]])]
     pairs = [(s, item, first) for s, item, first, _ in rows]
 
     def place(line):
@@ -192,12 +298,13 @@ def check_prose(where, text, problems, russian=True, band=None,
             # У английских текстов своих полос у линейки пока нет, ритм
             # README не меряется вовсе (свод C:\Dev\workplace\TEXTS.md) -
             # меряется только длина.
-            if length_only and kind.startswith("ритм"):
+            if (length_only or changed is not None) \
+                    and kind.startswith("ритм"):
                 continue
             if keep(level, kind):
                 problems.append((place(line_of(detail, rows)), detail,
                                  kind.split(" / ")[0]))
-        if band == LENGTH_ONLY:
+        if band == LENGTH_ONLY or changed is not None:
             stats = None
     return stats
 
@@ -217,8 +324,13 @@ def main(argv):
     forced = None
     rest = []
     args = iter(argv)
+    new = None
     for arg in args:
-        if arg == "--band":
+        if arg == "--new":
+            new = ""
+        elif arg.startswith("--new="):
+            new = arg.split("=", 1)[1]
+        elif arg == "--band":
             forced = next(args, None)
         elif arg.startswith("--band="):
             forced = arg.split("=", 1)[1]
@@ -232,27 +344,61 @@ def main(argv):
 
     problems = []
     rows = []
+    changed = None
+    if new is not None:
+        try:
+            base = new_base(new)
+            changed = changed_lines(base)
+        except NewError as error:
+            print("Проверка текстов --new не выполнена: %s" % error)
+            return 2
 
-    for path in markdown_files(targets):
+    if changed is not None and not targets:
+        # Изменённое - любой файл markdown хранилища, не только корень
+        # и doc: посты выпуска, DEPLOY, своды инструментов.
+        paths = [os.path.join(ROOT, name) for name in sorted(changed)
+                 if name.endswith(".md")
+                 and os.path.exists(os.path.join(ROOT, name))]
+    else:
+        paths = list(markdown_files(targets))
+    files = 0
+    for path in paths:
         name = os.path.relpath(path, ROOT)
+        lines_now = None
+        if changed is not None:
+            lines_now = changed.get(os.path.normpath(name))
+            if not lines_now:
+                continue
+        files += 1
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
         russian = measure.detect_lang(text) == "ru"
         band = forced or band_of(name)
         stats = check_prose(name, text, problems, russian=russian,
                             band=band, lexicon=name != "AGENTS.md",
-                            lines=True)
+                            lines=True, changed=lines_now)
         if stats:
             rows.append((name, band, stats))
 
+    helps = 0
     if not targets:
-        for name, key, line, text in help_strings():
+        for name, key, line, text, end in help_strings():
+            if changed is not None and not changed.get(
+                    os.path.normpath(name), set()).intersection(
+                    range(line, end + 1)):
+                continue
+            helps += 1
             where = "%s (%s, строка %d)" % (name, key, line)
             check_prose(where, text, problems,
                         russian=bool(re.search(r"[А-Яа-я]", text)))
 
     print("Проверка текстов")
     print("")
+    if changed is not None:
+        print("Только изменённое с %s: файлов markdown %d, подсказок %d. "
+              "Ритм не меряется, его меряет полный прогон."
+              % (base, files, helps))
+        print("")
     if problems:
         print("Находок: %d" % len(problems))
         for place, quote, reason in problems:
@@ -260,6 +406,8 @@ def main(argv):
     else:
         print("Находок нет.")
 
+    if changed is not None:
+        return 1 if (problems and strict) else 0
     print("")
     print("Ритм по measure.py")
     for name, band, s in rows:
