@@ -152,7 +152,10 @@ def check_prose(where, text, problems, russian=True, band=None,
     stats = None
     if band:
         stats, rhythm = measure.check_rhythm(pairs, lang, band)
-        found += rhythm
+        # У английских текстов своих полос у линейки пока нет (свод
+        # C:\Dev\workplace\TEXTS.md), меряется только длина.
+        found += [f for f in rhythm
+                  if russian or not f[1].startswith("ритм")]
     for level, kind, detail in found:
         if level == "error" or kind == "двоеточие внутри предложения":
             problems.append((where, detail, kind.split(" / ")[0]))

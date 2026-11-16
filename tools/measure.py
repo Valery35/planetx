@@ -174,6 +174,15 @@ SUBORDINATOR = re.compile(
 # Разбор текста
 # --------------------------------------------------------------------------
 
+# Значок это картинка внутри ссылки. Строка из одних значков - разметка.
+BADGE = r"\[!\[[^\]]*\]\([^)]*\)\]\([^)]*\)"
+BADGE_LINE = re.compile(r"(?:%s|\s)+" % BADGE)
+
+# Ссылка markdown. В счёт идёт её текст, адрес словами не считается.
+LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
+
+
 def detect_lang(text: str) -> str:
     cyr = len(re.findall(r"[А-Яа-яЁё]", text))
     lat = len(re.findall(r"[A-Za-z]", text))
@@ -199,6 +208,11 @@ def prose_lines(text: str):
         # Пустая строка и заголовок закрывают абзац, а прозой не являются.
         if not s or s.startswith("#") or s.startswith("|") \
                 or s.startswith(">") or s.startswith("!["):
+            out.append((None, False))
+            continue
+        # Строка значков - разметка, а не текст. Значок это картинка в
+        # ссылке, и строка из одних значков слов автора не содержит.
+        if BADGE_LINE.fullmatch(s):
             out.append((None, False))
             continue
         item = bool(re.match(r"^([-*+]\s+|\d+[.)]\s+)", s))
@@ -234,9 +248,16 @@ def sentences(text: str):
         first = True
         body = re.sub(r"[ \t]+", " ", chunk)
         body = re.sub(r"`[^`]*`", "CODE", body)
+        # Картинка слов не содержит, а у ссылки в счёт идёт только текст:
+        # закодированный адрес иначе даёт десятки мнимых слов.
+        body = IMAGE.sub(" ", body)
+        body = LINK.sub(r"\1", body)
         body = re.sub(r"^\*\*.+?\*\*\s*", "", body)
         body = re.sub(r"\*\*(.+?)\*\*", r"\1", body)
-        body = re.sub(r"(?<=[.!?>])\s+(?=[A-ZА-ЯЁ«\"(<])", "\n", body)
+        # Предложение начинается и с цифры, и со ссылки: «15 января 2026
+        # года…» и «[Поддержать разработку](…)» стоят после точки так же,
+        # как заглавная буква.
+        body = re.sub(r"(?<=[.!?>])\s+(?=[A-ZА-ЯЁ«\"(<\[0-9])", "\n", body)
         for p in body.split("\n"):
             p = p.strip()
             if len(p) < 2:
