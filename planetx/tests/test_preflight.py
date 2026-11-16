@@ -35,6 +35,37 @@ class TestUrls(unittest.TestCase):
         self.assertEqual(len(found), 2, found)
 
 
+class TestVersionPattern(unittest.TestCase):
+    """Номер с приставкой «v» прежний шаблон \\b…\\b пропускал молча."""
+
+    def numbers(self, text):
+        return [m.group(1) for m in preflight.VERSION.finditer(text)]
+
+    def test_prefixed_number_is_found(self):
+        self.assertEqual(self.numbers("PlanetX v1.44.1"), ["1.44.1"])
+        self.assertEqual(self.numbers("## [v0.5.4] - 2026"), ["0.5.4"])
+
+    def test_plain_and_archive_names(self):
+        self.assertEqual(self.numbers("Версия 1.44.1."), ["1.44.1"])
+        self.assertEqual(self.numbers("planetx-1.44.1.zip"), ["1.44.1"])
+        # Четыре части - не номер версии модуля.
+        self.assertEqual(self.numbers("сборка 1.44.1.7"), [])
+
+    def test_prefixed_mention_is_compared(self):
+        # README с номером «v» - расхождение видно, а не пропущено.
+        path = os.path.join(ROOT, "_version_probe.md")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("PlanetX v0.0.1\n")
+        saved = preflight.VERSION_FILES
+        preflight.VERSION_FILES = ("_version_probe.md",)
+        try:
+            found = preflight.version_mentions()
+        finally:
+            preflight.VERSION_FILES = saved
+            os.remove(path)
+        self.assertIn(("_version_probe.md:1", "0.0.1"), found)
+
+
 class TestTags(unittest.TestCase):
 
     def run_with(self, tags, head, tag_at, version):

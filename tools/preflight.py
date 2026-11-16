@@ -43,7 +43,10 @@ REQUIRED = ("name", "qgisMinimumVersion", "qgisMaximumVersion",
 # osgeo - привязки GDAL, они входят в состав QGIS.
 ALLOWED = {"qgis", "PyQt5", "PyQt6", "numpy", "OpenGL", "osgeo"}
 
-VERSION = re.compile(r"\b(\d+\.\d+\.\d+)\b")
+# Номер ищется и с приставкой: «v1.44.1». Граница слова \b между «v»
+# и цифрой не срабатывает, и прежний шаблон \b(\d+\.\d+\.\d+)\b такой
+# номер пропускал молча (находка Routeliner, ноябрь 2026 года).
+VERSION = re.compile(r"(?<![\d.])(\d+\.\d+\.\d+)(?!\.?\d)")
 # Файлы, где номер версии плагина повторяется. Ищется номер рядом
 # с именем плагина или в заголовке раздела журнала изменений.
 VERSION_FILES = ("README.md", "README.ru.md")
@@ -111,7 +114,7 @@ def version_mentions():
                 break
     for path in plugin_files():
         for number, line in enumerate(read(path).split("\n"), 1):
-            for match in re.finditer(r"PlanetX (\d+\.\d+\.\d+)", line):
+            for match in re.finditer(r"PlanetX v?(\d+\.\d+\.\d+)", line):
                 found.append(("%s:%d" % (os.path.relpath(path, ROOT),
                                          number), match.group(1)))
     return found
