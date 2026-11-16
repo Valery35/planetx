@@ -53,6 +53,8 @@ class TestRhythm(unittest.TestCase):
         self.assertEqual(check_texts.band_of("site/posts_1.44.1_social.md"),
                          "letter")
         self.assertEqual(check_texts.band_of("doc/MANUAL.md"), "note")
+        # README - полосой письма, решение автора от 16 ноября 2026 года.
+        self.assertEqual(check_texts.band_of("README.ru.md"), "letter")
         self.assertEqual(check_texts.band_of("doc/PLAN_PHASE1.md"),
                          "register")
         # Рабочий свод - записи с перечнями, ритм и длина не меряются.

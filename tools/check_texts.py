@@ -55,6 +55,7 @@ BANDS = (
     (r"^AGENTS\.md$", None),
     (r"^CHANGELOG", "letter"),
     (r"^site[/\\]posts_", "letter"),
+    (r"^README", "letter"),
     (r"^doc[/\\]PLAN_", "register"),
     (r"DEPLOY", "register"),
     (r".", "note"),
