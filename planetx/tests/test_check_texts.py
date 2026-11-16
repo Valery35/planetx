@@ -48,12 +48,46 @@ class TestRhythm(unittest.TestCase):
         self.assertNotIn("ритм", findings(mixed * 3, band="note"))
 
     def test_band_by_kind(self):
-        self.assertEqual(check_texts.band_of("CHANGELOG.md"), "register")
+        # Таблица полос свода линейки C:\Dev\workplace\TEXTS.md.
+        self.assertEqual(check_texts.band_of("CHANGELOG.md"), "letter")
         self.assertEqual(check_texts.band_of("site/posts_1.44.1_social.md"),
                          "letter")
-        self.assertEqual(check_texts.band_of("doc/MANUAL.md"), "letter")
+        self.assertEqual(check_texts.band_of("doc/MANUAL.md"), "note")
+        self.assertEqual(check_texts.band_of("doc/PLAN_PHASE1.md"),
+                         "register")
         self.assertEqual(check_texts.band_of("AGENTS.md"), "note")
-        self.assertEqual(check_texts.band_of("doc/SOURCES.md"), "note")
+
+    def test_markup_is_not_prose(self):
+        # Заголовки, таблицы и код - не предложения. Прежний счёт брал их
+        # в длину, отсюда ложные замечания на сводах.
+        text = ("# Заголовок свода из нескольких слов подряд\n\n"
+                "| Вид текста | Средняя | Коротких | Длинных |\n"
+                "|---|---|---|---|\n"
+                "| " + " ".join(["слово"] * 40) + " | 8-11 | 2/3 | 5 % |\n\n"
+                "```\n" + " ".join(["код"] * 40) + "\n```\n")
+        self.assertEqual(findings(text, band="note"), [])
+
+    def test_band_key(self):
+        # Средняя 9.8, коротких 40 %, длинных 20 % - полоса заметки
+        # выпуска, но не руководства.
+        text = ("Глобус открывается в отдельном окне. "
+                "Слой проекта ложится сразу. "
+                "Подписи основы идут поверх рельефа и не закрывают метки "
+                "на снимке. "
+                "Шкала времени открывается при первой метке со временем "
+                "в папке. "
+                "Тени от рельефа и зданий считаются по положению солнца "
+                "на момент шкалы и ложатся на глобус поверх снимка дня. ") * 3
+        path = os.path.join(ROOT, "tools", "_band_probe.md")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        try:
+            for band, red in (("note", True), ("letter", False)):
+                rel = os.path.relpath(path, ROOT)
+                code = check_texts.main([rel, "--strict", "--band", band])
+                self.assertEqual(code == 1, red, band)
+        finally:
+            os.remove(path)
 
 
 class TestProse(unittest.TestCase):

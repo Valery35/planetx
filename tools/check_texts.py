@@ -10,6 +10,10 @@
     python tools/check_texts.py                  все тексты
     python tools/check_texts.py AGENTS.md doc    выбранные файлы и папки
     python tools/check_texts.py --strict         код возврата 1 при находках
+    python tools/check_texts.py --band letter X  одна полоса ритма всем
+
+Markdown разбирает measure.py - заголовки, таблицы, код и цитаты
+предложениями не считаются, строки перечня идут отдельно.
 
 Прозу - ритм, длину предложений, общие стоп-слова, тире, точку
 с запятой, двоеточие - меряет tools/measure.py, копия измерителя
@@ -44,13 +48,12 @@ STOP_WORDS = ("схват",)
 # родственники (прямой, прямого, напрямую).
 STOP_WHOLE = ("прямо",)
 
-# Полоса ритма measure.py по виду текста, первое подходящее правило
-# пути. Роспись - tools/TEXTS.md.
+# Полоса ритма measure.py по виду текста - таблица свода линейки
+# C:\Dev\workplace\TEXTS.md, первое подходящее правило пути. Роспись -
+# tools/TEXTS.md. Ключ --band задаёт одну полосу всем файлам прогона.
 BANDS = (
-    (r"^CHANGELOG", "register"),
+    (r"^CHANGELOG", "letter"),
     (r"^site[/\\]posts_", "letter"),
-    (r"^README", "letter"),
-    (r"^doc[/\\]MANUAL", "letter"),
     (r"^doc[/\\]PLAN_", "register"),
     (r"DEPLOY", "register"),
     (r".", "note"),
@@ -159,7 +162,20 @@ def check_prose(where, text, problems, russian=True, band=None,
 
 def main(argv):
     strict = "--strict" in argv
-    targets = [a for a in argv if not a.startswith("--")]
+    forced = None
+    rest = []
+    args = iter(argv)
+    for arg in args:
+        if arg == "--band":
+            forced = next(args, None)
+        elif arg.startswith("--band="):
+            forced = arg.split("=", 1)[1]
+        else:
+            rest.append(arg)
+    if forced is not None and forced not in measure.BANDS["ru"]:
+        raise SystemExit("Полоса --band - одна из: %s" % ", ".join(
+            measure.BANDS["ru"]))
+    targets = [a for a in rest if not a.startswith("--")]
 
     problems = []
     rows = []
@@ -169,7 +185,7 @@ def main(argv):
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
         russian = measure.detect_lang(text) == "ru"
-        band = band_of(name)
+        band = forced or band_of(name)
         stats = check_prose(name, text, problems, russian=russian,
                             band=band, lexicon=name != "AGENTS.md")
         if stats:
