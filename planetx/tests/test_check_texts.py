@@ -102,6 +102,21 @@ class TestRhythm(unittest.TestCase):
             os.remove(path)
 
 
+class TestLines(unittest.TestCase):
+
+    def test_finding_names_its_line(self):
+        # Находка с местом в файле - иначе её ищут глазами по тексту.
+        text = ("# Заголовок\n\nПервый абзац без нарушений.\n\n"
+                "Второй абзац; с точкой с запятой.\n\n"
+                + " ".join(["слово"] * 40) + ".\n")
+        problems = []
+        check_texts.check_prose("x.md", text, problems, band="note",
+                                lines=True)
+        where = {reason: place for place, _, reason in problems}
+        self.assertEqual(where["точка с запятой"], "x.md:5")
+        self.assertEqual(where["длина"], "x.md:7")
+
+
 class TestProse(unittest.TestCase):
 
     def test_long_dash(self):

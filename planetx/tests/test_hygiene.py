@@ -666,12 +666,21 @@ def bom(source):
     return [1] if source.startswith("﻿") else []
 
 
+# Чужие файлы, взятые копией без правок: правила модуля их не касаются,
+# их правят в своём хранилище (tools/TEXTS.md, measure.py линейки).
+FOREIGN = {os.path.join("tools", "measure.py")}
+
+
 def python_files():
-    """Все модули плагина и инструментов, кроме вложенных библиотек."""
+    """Все модули плагина и инструментов, кроме вложенных библиотек
+    и чужих копий FOREIGN."""
     for top in (PLUGIN, os.path.join(ROOT, "tools")):
         for folder, dirs, files in os.walk(top):
             dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS)
             for name in sorted(files):
+                path = os.path.join(folder, name)
+                if os.path.relpath(path, ROOT) in FOREIGN:
+                    continue
                 if name.endswith(".py"):
                     yield os.path.join(folder, name)
 

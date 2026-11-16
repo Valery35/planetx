@@ -202,7 +202,7 @@ def prose_lines(text: str):
     out = []
     in_code = False
     in_item = False
-    for raw in text.splitlines():
+    for ln, raw in enumerate(text.splitlines(), 1):
         s = raw.strip()
         if s.startswith("```") or s.startswith("~~~"):
             in_code = not in_code
@@ -213,13 +213,13 @@ def prose_lines(text: str):
         # Пустая строка и заголовок закрывают абзац, а прозой не являются.
         if not s or s.startswith("#") or s.startswith("|") \
                 or s.startswith(">") or s.startswith("!["):
-            out.append((None, False))
+            out.append((None, False, ln))
             in_item = False
             continue
         # Строка значков - разметка, а не текст. Значок это картинка в
         # ссылке, и строка из одних значков слов автора не содержит.
         if BADGE_LINE.fullmatch(s):
-            out.append((None, False))
+            out.append((None, False, ln))
             in_item = False
             continue
         item = bool(re.match(r"^([-*+]\s+|\d+[.)]\s+)", s))
@@ -227,16 +227,19 @@ def prose_lines(text: str):
         # один пункт. Иначе его продолжение считается своим предложением, и
         # перечень рассыпается на обрывки.
         if in_item and not item and raw[:1].isspace() and out and out[-1][0]:
-            out[-1] = (out[-1][0] + " " + s, out[-1][1])
+            out[-1] = (out[-1][0] + " " + s, out[-1][1], out[-1][2])
             continue
         s = re.sub(r"^([-*+]\s+|\d+[.)]\s+)", "", s)
         in_item = item
-        out.append((s, item))
+        out.append((s, item, ln))
     return out
 
 
-def sentences(text: str):
-    """Предложения прозы, каждое с пометкой «строка перечня».
+def sentences_at(text: str):
+    """Предложения прозы, каждое с пометкой «строка перечня» и номером строки.
+
+    Номер нужен обёрткам продуктов: находка без места в файле заставляет
+    искать её глазами по всему тексту.
 
     Подпись абзаца вида **Пунктуация.** предложением не считается: слева
     стоит имя раздела, а не утверждение. Угловые скобки образца закрывают
@@ -244,21 +247,24 @@ def sentences(text: str):
     """
     chunks = []
     buf = []
-    for s, item in prose_lines(text):
+    at = 0
+    for s, item, ln in prose_lines(text):
         if s is None or item:
             if buf:
-                chunks.append((" ".join(buf), False))
+                chunks.append((" ".join(buf), False, at))
                 buf = []
             if item:
-                chunks.append((s, True))
+                chunks.append((s, True, ln))
         else:
+            if not buf:
+                at = ln
             buf.append(s)
     if buf:
-        chunks.append((" ".join(buf), False))
+        chunks.append((" ".join(buf), False, at))
 
 
     out = []
-    for chunk, is_item in chunks:
+    for chunk, is_item, at in chunks:
         first = True
         body = re.sub(r"[ \t]+", " ", chunk)
         body = re.sub(r"`[^`]*`", "CODE", body)
@@ -283,9 +289,14 @@ def sentences(text: str):
             # Угловые скобки образца - место подстановки, а не текст автора.
             if re.fullmatch(r"<[^<>]*>[.,]?", p):
                 continue
-            out.append((p, is_item, first))
+            out.append((p, is_item, first, at))
             first = False
     return out
+
+
+def sentences(text: str):
+    """Предложения прозы без номера строки, по три поля на каждое."""
+    return [(p, is_item, first) for p, is_item, first, _ in sentences_at(text)]
 
 
 def strip_mentions(s: str) -> str:

@@ -39,8 +39,21 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 PLUGIN = os.path.join(ROOT, "planetx")
 SKIP_DIRS = {"__pycache__", "libs", "tests"}
-sys.path.insert(0, HERE)
-import measure  # noqa: E402
+
+def _load_measure():
+    """Измеритель линейки по пути файла. Простой import measure взял бы
+    первый measure в sys.path, а у модуля есть свой core/measure.py
+    (линейка на глобусе) - в общем прогоне тестов он стоит раньше."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "planetx_text_measure", os.path.join(HERE, "measure.py"))
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+measure = _load_measure()
 
 # Стоп-слова модуля сверх общих measure.STOP_WORDS.
 STOP_WORDS = ("схват",)
@@ -142,34 +155,61 @@ def own_words(text):
 
 
 def check_prose(where, text, problems, russian=True, band=None,
-                lexicon=True):
+                lexicon=True, lines=False):
     """Проза одного текста. measure.py - пунктуация, общие стоп-слова
     и при заданной полосе ритм и длина, здесь - свои слова. Находки -
-    тройки место, цитата, суть. Возвращает сводку ритма или None."""
+    тройки место, цитата, суть. При lines место - «файл:строка», строка -
+    начало абзаца или пункта перечня с находкой (measure.sentences_at).
+    Находки ритма относятся ко всему тексту и идут без строки.
+    Возвращает сводку ритма или None."""
     lang = "ru" if russian else "en"
-    pairs = measure.sentences(text)
-    found = measure.check_punctuation(pairs, lang)
-    if lexicon:
-        found += measure.check_words(pairs, lang)
+    rows = measure.sentences_at(text)
+    pairs = [(s, item, first) for s, item, first, _ in rows]
+
+    def place(line):
+        return "%s:%d" % (where, line) if lines and line else where
+
+    def keep(level, kind):
+        return level == "error" or kind == "двоеточие внутри предложения"
+
+    # Пунктуация и слова - по одному предложению, чтобы знать строку.
+    for s, item, first, line in rows:
+        found = measure.check_punctuation([(s, item, first)], lang)
+        if lexicon:
+            found += measure.check_words([(s, item, first)], lang)
+        for level, kind, detail in found:
+            if keep(level, kind):
+                problems.append((place(line), detail, kind.split(" / ")[0]))
+        if russian and lexicon:
+            for quote, reason in own_words(s):
+                problems.append((place(line), quote, reason))
     stats = None
     if band:
         length_only = band == LENGTH_ONLY or not russian
         stats, rhythm = measure.check_rhythm(
             pairs, lang, "note" if band == LENGTH_ONLY else band)
-        # У английских текстов своих полос у линейки пока нет, ритм
-        # README не меряется вовсе (свод C:\Dev\workplace\TEXTS.md) -
-        # меряется только длина.
-        found += [f for f in rhythm
-                  if not (length_only and f[1].startswith("ритм"))]
+        for level, kind, detail in rhythm:
+            # У английских текстов своих полос у линейки пока нет, ритм
+            # README не меряется вовсе (свод C:\Dev\workplace\TEXTS.md) -
+            # меряется только длина.
+            if length_only and kind.startswith("ритм"):
+                continue
+            if keep(level, kind):
+                problems.append((place(line_of(detail, rows)), detail,
+                                 kind.split(" / ")[0]))
         if band == LENGTH_ONLY:
             stats = None
-    for level, kind, detail in found:
-        if level == "error" or kind == "двоеточие внутри предложения":
-            problems.append((where, detail, kind.split(" / ")[0]))
-    if russian and lexicon:
-        for quote, reason in own_words(text):
-            problems.append((where, quote, reason))
     return stats
+
+
+def line_of(detail, rows):
+    """Строка предложения, начало которого measure.py привёл в находке
+    длины или ритма. Находка о всём тексте строки не имеет - 0."""
+    for s, _, _, line in rows:
+        for cut in (90, 60):
+            if s[:cut] and s[:cut] in detail:
+                return line
+    return 0
 
 
 def main(argv):
@@ -200,7 +240,8 @@ def main(argv):
         russian = measure.detect_lang(text) == "ru"
         band = forced or band_of(name)
         stats = check_prose(name, text, problems, russian=russian,
-                            band=band, lexicon=name != "AGENTS.md")
+                            band=band, lexicon=name != "AGENTS.md",
+                            lines=True)
         if stats:
             rows.append((name, band, stats))
 
