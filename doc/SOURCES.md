@@ -159,7 +159,7 @@ Tiles из обозревателя QGIS.
 шапки выше этой широты закрываются снимками служб Esri
 `Polar/Arctic_Imagery` (EPSG:5936) и `Polar/Antarctic_Imagery`
 (EPSG:3031) на `server.arcgisonline.com`, по 36 тайлов уровня 8 на
-полюс, решение автора от 23 октября 2026 года. Подпись службы - «Source:
+полюс. Это решение автора от 23 октября 2026 года. Подпись службы - «Source:
 Earthstar Geographics», сверено 23 октября 2026 года. Условия - Esri
 Master License Agreement, как у World Imagery. На снимке подпись
 «Earthstar Geographics, Esri» стоит, если подпись подложки её не
@@ -234,7 +234,7 @@ Astrogeology (NASA, GSFC, Arizona State University), серые PNG.
 находятся в общественном достоянии, NASA просит указывать источник.
 Тайлы - в записи Terrarium. До 1.13.1 высоты были тайлами уровней 0-5
 из сеток PDS Geosciences Node (MOLA MEGDR 32 точки на градус, LOLA GDR
-64 точки на градус) в хранилище planetx-terrain, они остаются там для
+64 точки на градус) в хранилище planetx-terrain. Они остаются там для
 прежних версий модуля.
 
 ## Другие тела

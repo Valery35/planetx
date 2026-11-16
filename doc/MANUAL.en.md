@@ -1042,8 +1042,8 @@ on, the model is requested again. The received archive is saved to the
 PlanetX folder of the QGIS profile, later sessions take it from there
 without the network. If the authors' site does not answer, the archive
 crust1.0.tar.gz can be downloaded with a browser from
-https://igppweb.ucsd.edu/~gabi/crust1/crust1.0.tar.gz and put into this
-folder under the same name, then the Earth cutaway row is switched off
+https://igppweb.ucsd.edu/~gabi/crust1/crust1.0.tar.gz. It is put into
+this folder under the same name, then the Earth cutaway row is switched off
 and on. QGIS opens the profile folder with the menu item Settings -
 User Profiles - Open Active Profile Folder, the PlanetX folder lies in
 it.
@@ -1490,7 +1490,7 @@ the project.
 
 The Lidar point clouds item of the menu on the globe finds tiles
 of open lidar surveys at the point and puts them as point cloud layers
-into the PlanetX - lidar point clouds group of the project, the layers
+into the PlanetX - lidar point clouds group of the project. The layers
 are checked on the globe at once. There are two sources:
 
 - IGN LiDAR HD - all of France in 1 km tiles, at least 10 points per
@@ -3268,8 +3268,8 @@ classes.
 #### Names from the assistant
 
 The «Names from the assistant» button next to «Add class» sends the
-class table to the assistant after «Build» - the image band means per
-class, the share of the site, the number and mean size of areas, the
+class table to the assistant after «Build». The table holds the image band
+means per class, the share of the site, the number and mean size of areas, the
 place and month of the image, for tasks also the names given by rules.
 The image, layer and file names are not sent, pressing the button is
 consent to send the table. The answer is names of the class rows, they
@@ -3617,9 +3617,10 @@ The style comes from QGIS, as with ordinary layers:
 After the style or data of a layer is edited, the globe rebuilds the
 model as with ordinary layers. The Create template… button of the
 Subsurface mode window writes a GeoPackage file with all tables of the
-mode and an example at the view point - a drill hole with two intervals,
-a section, a tunnel and a cut - and adds it to the project as the
-Subsurface template group. The template tables are filled with your own
+mode and an example at the view point. The example is a drill hole with
+two intervals, a section, a tunnel and a cut, and the file goes into the
+project as the Subsurface template group. The template tables are filled
+with your own
 data.
 
 ### Grids by elevations
@@ -4131,9 +4132,10 @@ along the heading with the aircraft pitch, and the frame tilts with the
 bank. In level flight the horizon is in the middle of the frame, with the
 sky above it. In the cockpit green instruments on the windscreen replace
 the readout. These are the pitch ladder with the horizon line turned by
-the bank, the aircraft symbol in the middle, the heading tape at the
-top, the speed tape in km/h on the left and the altitude tape above sea
-level in metres on the right. Below them are the vertical speed, the
+the bank, the aircraft symbol in the middle and the heading tape at
+the top. At the sides are the speed tape in km/h on the left and the
+altitude tape above sea level in metres on the right. Below them are the
+vertical speed, the
 thrust and the height above the ground. The horizon line of the ladder
 matches the horizon in the frame.
 
@@ -4778,8 +4780,8 @@ The plugin keeps a log in the file `PlanetX/planetx.log` of the QGIS
 profile folder. The Log button of the About window opens it in the
 system program. The log records the versions of the plugin, QGIS, Qt
 and Python, the graphics card, the opening and closing of the globe
-window, the choice of maps and layers, the base map, the body and
-the demo, the SSL errors of QGIS network requests with the
+window. It also records the choice of maps and layers, the base map,
+the body and the demo and the SSL errors of QGIS network requests with the
 certificate owner. The log receives all unhandled Python errors in
 QGIS, including those in worker threads. An error of another plugin
 is marked with its name. Every 15 minutes the log records the memory
@@ -4788,7 +4790,7 @@ of QGIS and the count of Windows GDI and USER objects.
 When QGIS does not respond for more than 30 s, a separate watch
 process of the plugin writes next to the log a process dump
 `hang-<process number>-<time>.dmp` with the stacks of all threads,
-about 300 KB without memory contents, and writes its analysis at once -
+about 300 KB without memory contents. It writes its analysis at once -
 for every thread the QGIS and Qt functions it stands in. It shows which
 thread waits for what. The watch runs outside QGIS and writes the dump
 even when QGIS hangs completely. The last three dumps are kept.
