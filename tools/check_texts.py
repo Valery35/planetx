@@ -4,19 +4,26 @@
 """
 Проверка текстов по требованиям из AGENTS.md.
 
-Перенесена из Topoliner. Смотрит на всё, что читает человек: файлы
-markdown и подсказки полей в вызовах setHelp.
+Смотрит на всё, что читает человек: файлы markdown и подсказки полей
+в вызовах setHelp.
 
     python tools/check_texts.py                  все тексты
     python tools/check_texts.py AGENTS.md doc    выбранные файлы и папки
     python tools/check_texts.py --strict         код возврата 1 при находках
 
+Прозу - ритм, длину предложений, общие стоп-слова, тире, точку
+с запятой, двоеточие - меряет tools/measure.py, копия измерителя
+линейки (tools/TEXTS.md). Здесь только своё: подсказки setHelp,
+стоп-слова модуля сверх общих, «число» вместо «количества» и полоса
+ритма по виду текста (BANDS). Свой счёт длины предложений убран, чтобы
+два инструмента не спорили числами.
+
 Проверка машинная и находок не исправляет. Каждая находка - это файл,
-строка, цитата и суть расхождения.
+цитата и суть расхождения.
 
 В AGENTS.md лексика не проверяется. В нём стоит список стоп-слов, и каждое
-слово этого списка обернулось бы находкой на себя же. Пунктуация
-в AGENTS.md проверяется.
+слово этого списка обернулось бы находкой на себя же. Пунктуация и ритм
+в AGENTS.md проверяются.
 """
 
 import ast
@@ -24,24 +31,38 @@ import os
 import re
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
 PLUGIN = os.path.join(ROOT, "planetx")
 SKIP_DIRS = {"__pycache__", "libs", "tests"}
+sys.path.insert(0, HERE)
+import measure  # noqa: E402
 
-STOP_WORDS = (
-    "честный", "честнее", "честно", "врать", "врёт", "главные грабли",
-    "софт", "кучка", "гладь", "скучный", "лаг", "членение", "наблюдённый",
-    "предъявить", "соблазн", "лесенка", "сходит с рук", "деваться некуда",
-    "вперемешку", "крутить параметры", "руками", "кучу", "под рукой",
-    "мелочь", "схват",
-)
+# Стоп-слова модуля сверх общих measure.STOP_WORDS.
+STOP_WORDS = ("схват",)
 # Слова, которые ловятся только целиком: у них есть законные
 # родственники (прямой, прямого, напрямую).
 STOP_WHOLE = ("прямо",)
 
-LONG_DASH = re.compile(r"[–—]")
-SENTENCE = re.compile(r"[^.!?]+[.!?]")
-LIST_ITEM = re.compile(r"^(-|\*|\d+\.)\s+")
+# Полоса ритма measure.py по виду текста, первое подходящее правило
+# пути. Роспись - tools/TEXTS.md.
+BANDS = (
+    (r"^CHANGELOG", "register"),
+    (r"^site[/\\]posts_", "letter"),
+    (r"^README", "letter"),
+    (r"^doc[/\\]MANUAL", "letter"),
+    (r"^doc[/\\]PLAN_", "register"),
+    (r"DEPLOY", "register"),
+    (r".", "note"),
+)
+
+
+def band_of(name):
+    """Полоса ритма файла по пути от корня хранилища."""
+    for pattern, band in BANDS:
+        if re.search(pattern, name):
+            return band
+    return "note"
 
 
 def markdown_in(folder):
@@ -97,105 +118,43 @@ def literal_text(node):
     return value if isinstance(value, str) else None
 
 
-def clean_markdown(text):
-    """Текст без кода, таблиц и заголовков. Остаётся проза.
-
-    Блоки кода заменяются пустыми строками, а не вырезаются. Иначе номера
-    строк в находках уезжают относительно исходного файла.
-    """
-    text = re.sub(r"```.*?```",
-                  lambda m: "\n" * m.group(0).count("\n"), text, flags=re.S)
-    text = re.sub(r"`[^`]*`", "", text)
-    lines = []
-    for line in text.split("\n"):
-        stripped = line.strip()
-        if stripped.startswith(("|", "#", "![", "[!")):
-            lines.append("")
-            continue
-        lines.append(line)
-    return "\n".join(lines)
+def own_words(text):
+    """Находки модуля сверх measure.py: стоп-слова и «число»."""
+    out = []
+    low = measure.strip_mentions(re.sub(r"`[^`]*`", " ", text)).lower()
+    for word in STOP_WORDS:
+        for match in re.finditer(r"\b%s" % re.escape(word), low):
+            out.append((word, "стоп-слово"))
+    for word in STOP_WHOLE:
+        for match in re.finditer(r"\b%s\b" % re.escape(word), low):
+            out.append((word, "стоп-слово"))
+    for match in re.finditer(r"\bчисл[оа]\b", low):
+        quote = low[max(0, match.start() - 18):match.end() + 18]
+        out.append((quote.strip(), "«число» вместо «количества»"))
+    return out
 
 
-def colon_is_fine(before, after):
-    """Двоеточие перед списком, в подписи, в соотношении и в адресе."""
-    if not after.strip():
-        return True
-    if before.rstrip().endswith("**") or after.lstrip().startswith("**"):
-        return True
-    if re.search(r"\d\s*$", before) and re.match(r"\s*\d", after):
-        return True
-    if re.search(r"(https?|file|mailto)$", before) or after.startswith("//"):
-        return True
-    return False
-
-
-def check_prose(where, text, problems, russian=True):
-    """Пунктуация и лексика в одном куске текста."""
-    plain = re.sub(r"<[^>]+>", " ", text)
-    for number, line in enumerate(plain.split("\n"), 1):
-        place = "%s:%d" % (where, number)
-        if LONG_DASH.search(line):
-            problems.append((place, line.strip(), "длинное тире"))
-        if ";" in line:
-            problems.append((place, line.strip(), "точка с запятой"))
-        for match in re.finditer(r":", line):
-            if colon_is_fine(line[:match.start()], line[match.end():]):
-                continue
-            quote = line[max(0, match.start() - 18):match.start() + 18]
-            problems.append((place, quote.strip(), "двоеточие внутри строки"))
-        if not russian:
-            continue
-        low = line.lower()
-        for word in STOP_WORDS:
-            if re.search(r"\b%s" % re.escape(word), low):
-                problems.append((place, word, "стоп-слово"))
-        for word in STOP_WHOLE:
-            if re.search(r"\b%s\b" % re.escape(word), low):
-                problems.append((place, word, "стоп-слово"))
-        for match in re.finditer(r"\bчисл[оа]\b", low):
-            near = low[max(0, match.start() - 1):match.end() + 1]
-            if near.startswith("«") or near.endswith("»"):
-                continue
-            quote = line[max(0, match.start() - 18):match.end() + 18]
-            problems.append((place, quote.strip(),
-                             "«число» вместо «количества»"))
-
-
-def text_blocks(text):
-    """Куски текста, внутри которых ищутся предложения.
-
-    Граница куска - пустая строка и начало пункта списка. Пункт списка
-    часто идёт без точки, и без этой границы счётчик склеивает весь список
-    со следующим предложением. В Topoliner счётчик этой границы не знает.
-    """
-    plain = re.sub(r"<[^>]+>", " ", text)
-    blocks, current = [], []
-    for line in plain.split("\n"):
-        stripped = line.strip()
-        if not stripped or LIST_ITEM.match(stripped):
-            if current:
-                blocks.append(" ".join(current))
-            current = []
-        if stripped:
-            current.append(stripped)
-    if current:
-        blocks.append(" ".join(current))
-    return blocks
-
-
-def sentence_stats(text):
-    lengths = []
-    for block in text_blocks(text):
-        block = LIST_ITEM.sub("", block)
-        if not block.rstrip().endswith((".", "!", "?")):
-            block += "."
-        lengths += [len(s.split()) for s in SENTENCE.findall(block)
-                    if s.strip()]
-    if not lengths:
-        return 0.0, 0, 0, 0
-    mean = sum(lengths) / len(lengths)
-    return (mean, len(lengths), sum(1 for n in lengths if n > 28),
-            sum(1 for n in lengths if n > 34))
+def check_prose(where, text, problems, russian=True, band=None,
+                lexicon=True):
+    """Проза одного текста. measure.py - пунктуация, общие стоп-слова
+    и при заданной полосе ритм и длина, здесь - свои слова. Находки -
+    тройки место, цитата, суть. Возвращает сводку ритма или None."""
+    lang = "ru" if russian else "en"
+    pairs = measure.sentences(text)
+    found = measure.check_punctuation(pairs, lang)
+    if lexicon:
+        found += measure.check_words(pairs, lang)
+    stats = None
+    if band:
+        stats, rhythm = measure.check_rhythm(pairs, lang, band)
+        found += rhythm
+    for level, kind, detail in found:
+        if level == "error" or kind == "двоеточие внутри предложения":
+            problems.append((where, detail, kind.split(" / ")[0]))
+    if russian and lexicon:
+        for quote, reason in own_words(text):
+            problems.append((where, quote, reason))
+    return stats
 
 
 def main(argv):
@@ -203,22 +162,24 @@ def main(argv):
     targets = [a for a in argv if not a.startswith("--")]
 
     problems = []
-    texts = []
+    rows = []
 
     for path in markdown_files(targets):
         name = os.path.relpath(path, ROOT)
         with open(path, encoding="utf-8") as fh:
-            body = clean_markdown(fh.read())
-        russian = not name.endswith(".en.md") and name != "AGENTS.md"
-        check_prose(name, body, problems, russian=russian)
-        texts.append((name, body))
+            text = fh.read()
+        russian = measure.detect_lang(text) == "ru"
+        band = band_of(name)
+        stats = check_prose(name, text, problems, russian=russian,
+                            band=band, lexicon=name != "AGENTS.md")
+        if stats:
+            rows.append((name, band, stats))
 
     if not targets:
         for name, key, line, text in help_strings():
             where = "%s (%s, строка %d)" % (name, key, line)
             check_prose(where, text, problems,
                         russian=bool(re.search(r"[А-Яа-я]", text)))
-            texts.append((where, text))
 
     print("Проверка текстов")
     print("")
@@ -230,16 +191,12 @@ def main(argv):
         print("Находок нет.")
 
     print("")
-    print("Длина предложений")
-    rows = []
-    for name, text in texts:
-        mean, total, over28, over34 = sentence_stats(text)
-        if total:
-            rows.append((over34, over28, mean, total, name))
-    rows.sort(reverse=True)
-    for over34, over28, mean, total, name in rows[:12]:
-        print("  %-30s средняя %4.1f, предложений %4d, длиннее 28: %d, "
-              "длиннее 34: %d" % (name, mean, total, over28, over34))
+    print("Ритм по measure.py")
+    for name, band, s in rows:
+        print("  %-30s %-8s средняя %4.1f (%s), коротких %2.0f %%, "
+              "длинных %2.0f %%, длиннее %d: %d" % (
+                  name, band, s["mean"], s["mean_band"], s["short_pct"],
+                  s["long_pct"], s["error_at"], s["over_error"]))
     return 1 if (problems and strict) else 0
 
 
