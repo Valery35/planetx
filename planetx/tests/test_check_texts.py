@@ -55,7 +55,9 @@ class TestRhythm(unittest.TestCase):
         self.assertEqual(check_texts.band_of("doc/MANUAL.md"), "note")
         self.assertEqual(check_texts.band_of("doc/PLAN_PHASE1.md"),
                          "register")
-        self.assertEqual(check_texts.band_of("AGENTS.md"), "note")
+        # Рабочий свод - записи с перечнями, ритм и длина не меряются.
+        self.assertIsNone(check_texts.band_of("AGENTS.md"))
+        self.assertEqual(check_texts.band_of("doc/AGENTS_NOTES.md"), "note")
 
     def test_markup_is_not_prose(self):
         # Заголовки, таблицы и код - не предложения. Прежний счёт брал их

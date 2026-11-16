@@ -52,6 +52,7 @@ STOP_WHOLE = ("прямо",)
 # C:\Dev\workplace\TEXTS.md, первое подходящее правило пути. Роспись -
 # tools/TEXTS.md. Ключ --band задаёт одну полосу всем файлам прогона.
 BANDS = (
+    (r"^AGENTS\.md$", None),
     (r"^CHANGELOG", "letter"),
     (r"^site[/\\]posts_", "letter"),
     (r"^doc[/\\]PLAN_", "register"),
@@ -61,7 +62,8 @@ BANDS = (
 
 
 def band_of(name):
-    """Полоса ритма файла по пути от корня хранилища."""
+    """Полоса ритма файла по пути от корня хранилища, None - ритм
+    и длина не меряются."""
     for pattern, band in BANDS:
         if re.search(pattern, name):
             return band
