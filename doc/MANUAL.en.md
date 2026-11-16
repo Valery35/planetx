@@ -485,13 +485,15 @@ groups, a click on a group shows only that group.
   layers.
 - Archive and surveys - Imagery archive (Esri Wayback, event imagery),
   Historical maps and Imagery at a point.
-- Inside the Earth - Geology (Geological map, Lithology, Earth cutaway,
-  Paleogeography), Earthquakes and plates (Earthquakes, Historical
-  earthquakes, Plate boundaries, Active faults, Plate motion,
-  Volcanoes), Geophysics (Magnetic poles, Declination lines, Magnetic
-  anomalies, Gravity anomalies, Bouguer anomalies, Geoid, Ocean floor
-  age, Heat flow) and Commodities (Mineral deposits, Mining areas,
-  OSM mines and quarries).
+- Inside the Earth - four groups:
+  - Geology - Geological map, Lithology, Earth cutaway, Paleogeography.
+  - Earthquakes and plates - Earthquakes, Historical earthquakes, Plate
+    boundaries, Active faults, Plate motion, Volcanoes.
+  - Geophysics - Magnetic poles, Declination lines, Magnetic anomalies,
+    Gravity anomalies, Bouguer anomalies, Geoid, Ocean floor age, Heat
+    flow.
+  - Commodities - Mineral deposits, Mining areas, OSM mines and
+    quarries.
 - Sky - Sky and light (Stars, Atmosphere, Clouds, Sun, Satellites) and
   Satellites - the satellite groups.
 - Energy and transport - Energy (Power plants, Power lines and
