@@ -141,40 +141,9 @@ def help_strings():
 NOTES = []
 
 
-class NewError(Exception):
-    """--new проверить изменённое не может: нет git, метки или основания.
-    Прогон тогда кончается отказом, а не пустой проверкой."""
-
-
-def git_program():
-    """git из PATH, иначе из GitHub Desktop - у автора git не в PATH.
-    Папку app-* берём самую свежую по дате: по имени app-3.6.9 встаёт
-    после app-3.6.11."""
-    import shutil
-    found = shutil.which("git")
-    if found:
-        return found
-    base = os.path.join(os.environ.get("LOCALAPPDATA", ""), "GitHubDesktop")
-    paths = []
-    if os.path.isdir(base):
-        for name in os.listdir(base):
-            exe = os.path.join(base, name, "resources", "app", "git", "cmd",
-                               "git.exe")
-            if name.startswith("app-") and os.path.exists(exe):
-                paths.append(exe)
-    if not paths:
-        raise NewError("git не найден ни в PATH, ни в папке GitHub Desktop.")
-    return max(paths, key=os.path.getmtime)
-
-
-def git(*args):
-    import subprocess
-    done = subprocess.run([git_program()] + list(args), cwd=ROOT,
-                          capture_output=True, text=True, encoding="utf-8")
-    if done.returncode:
-        raise NewError("git %s: %s" % (" ".join(args),
-                                         done.stderr.strip()))
-    return done.stdout
+# --new проверить изменённое не может: нет git, метки или основания.
+# Прогон тогда кончается отказом, а не пустой проверкой.
+from gittool import GitError as NewError, git  # noqa: E402
 
 
 def new_base(wanted):

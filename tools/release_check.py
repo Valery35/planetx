@@ -12,7 +12,8 @@
 3 часа». По порядку:
 - тесты ядра без QGIS;
 - согласованность пар документов (tools/check_docs.py);
-- готовность к каталогу (tools/preflight.py);
+- готовность к каталогу (tools/preflight.py --net) - и адреса
+  metadata.txt с ответом сервера, и номер версии против меток выпусков;
 - тексты для пользователя (tools/check_texts.py) - находки идут
   замечанием и проверку не останавливают, в старых текстах есть
   и ложные находки, двоеточия подписей источников;
@@ -157,7 +158,8 @@ def main(argv):
                         os.path.join("planetx", "tests")]),
         ("Пары документов", [py, os.path.join("tools", "check_docs.py")]),
         ("Готовность к каталогу", [py, os.path.join("tools",
-                                                    "preflight.py")]),
+                                                    "preflight.py"),
+                                   "--net"]),
     ]
     failed = []
     for title, args in checks:
