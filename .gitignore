@@ -21,3 +21,4 @@ doc/_header.tex
 
 # Указатели руководств бота, собирает bot/build_index.py
 bot/data/
+.claude/
