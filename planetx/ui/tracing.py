@@ -746,7 +746,7 @@ def _stroke_as_fill(layer):
 def write_traced(path, result):
     """Многоугольники трассировки файлом GeoPackage в UTM. Кольца - углы
     клеток сетки результата, неверный многоугольник чинит MakeValid."""
-    from osgeo import gdal, ogr, osr
+    from osgeo import gdal
     warm()
     # IsValid пишет о самопересечении предупреждением GDAL, кольцо
     # чинится ниже.

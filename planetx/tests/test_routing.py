@@ -2,7 +2,6 @@
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
 """Тесты core/routing.py: разбор дорог тайла, граф, путь."""
-import math
 import os
 import sys
 import unittest

@@ -6,7 +6,6 @@
 # Тесты ядра отчёта по створу. Синтетический рельеф, эталонные цифры
 # посчитаны руками:
 #     python grid_isolines/tests/test_topo_gauge.py
-import math
 import os
 import sys
 
