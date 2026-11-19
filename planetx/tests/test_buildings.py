@@ -7,6 +7,7 @@
 29 сентября 2026 года, центр Перми и Берлин-Митте. © OpenMapTiles,
 © участники OpenStreetMap, ODbL.
 """
+import math
 import os
 import sys
 import time
@@ -218,10 +219,26 @@ class TestMesh(unittest.TestCase):
         lat, lon, h = ecef_to_geodetic(xyz)
         top = len(m.vertices) - len(self.fp.latlon)
         ground = slope(self.fp.latlon[:, 0], self.fp.latlon[:, 1])
-        low = np.full(len(self.fp.height), np.inf)
-        np.minimum.at(low, self.fp.owner, ground)
-        want = (low + self.fp.height)[self.fp.owner]
+        high = np.full(len(self.fp.height), -np.inf)
+        np.maximum.at(high, self.fp.owner, ground)
+        want = (high + self.fp.height)[self.fp.owner]
         self.assertLess(float(np.abs(h[top:] - want).max()), 0.01)
+
+    def test_datum_is_high(self):
+        # Отметка дома - наивысшая точка рельефа под ним: на склоне дом
+        # от низкой точки уходил под землю (просьба автора 19.11.2026).
+        fp = bd.footprints((14, 0, 0), _tile([[square(100, 100, 50)]]))
+
+        def slope(lats, lons):
+            return 100.0 + lons * 0.0 + lats * 1000.0
+
+        m = bd.mesh(fp, slope)
+        xyz = m.center + m.vertices["position"].astype(np.float64)
+        lat, lon, h = ecef_to_geodetic(xyz)
+        ring = fp.latlon[fp.owner == 0]
+        highest = float(slope(ring[:, 0], ring[:, 1]).max())
+        self.assertAlmostEqual(float(h.max()), highest + fp.height[0],
+                               places=2)
 
     def test_mesh_ok(self):
         m = bd.mesh(self.fp)
@@ -280,6 +297,149 @@ class TestNearTiles(unittest.TestCase):
         self.assertGreater(len(north), 0)
         self.assertEqual(south, [])
 
+
+class TestRoofShapes(unittest.TestCase):
+    def test_parse(self):
+        self.assertEqual(bd.roof_attrs({"roof_shape": "gabled",
+                                        "roof_direction": 90,
+                                        "roof_height": 3.5}),
+                         bd.Roof(bd.GABLED, 90.0, 3.5))
+        self.assertEqual(bd.roof_attrs({"roof_shape": "HiPPed"}).shape,
+                         bd.HIPPED)
+        self.assertEqual(bd.roof_attrs({"roof_shape": "half-hipped"}).shape,
+                         bd.HALF_HIPPED)
+        self.assertEqual(bd.roof_attrs({"roof_shape": "round"}).shape,
+                         bd.FLAT)
+        self.assertEqual(bd.roof_attrs({}).shape, bd.FLAT)
+
+    def test_rise(self):
+        pts = square(0, 0, 40)
+        roof = bd.Roof(bd.GABLED, None, 4.0)
+        self.assertEqual(bd._roof_rise(roof, 10, 0, pts), 4.0)
+        roof = bd.Roof(bd.GABLED, None, None)
+        # полуширина 20 единиц тайла
+        want = math.tan(math.radians(bd.ROOF_PITCH)) * 20.0
+        self.assertAlmostEqual(bd._roof_rise(roof, 100, 0, pts), want)
+        # полуширина в единицах тайла переводится в метры через scale
+        self.assertAlmostEqual(bd._roof_rise(roof, 100, 0, pts, 0.5),
+                               want * 0.5)
+        # оценённая крыша не выше половины здания
+        self.assertEqual(bd._roof_rise(roof, 10, 0, pts), 5.0)
+        # крыша ниже половины метра не рисуется
+        self.assertEqual(bd._roof_rise(roof, 0.6, 0, pts), 0.0)
+
+    def test_frame(self):
+        # Рамка ложится по длинной стороне, полуразмеры - половины сторон.
+        pts = np.array([[0, 0], [100, 0], [100, 10], [0, 10]],
+                       dtype=np.float64)
+        frame = bd._roof_frame(pts, None)
+        self.assertIsNotNone(frame)
+        self.assertAlmostEqual(frame[3], 50.0, places=3)  # L
+        self.assertAlmostEqual(frame[4], 5.0, places=3)   # W
+
+    def test_gabled_cover(self):
+        pts = square(0, 0, 40)
+        verts, rise, tri = bd.roof_surface(pts, bd.GABLED, None, 5.0)
+        self.assertIsNotNone(verts)
+        t = verts[tri.reshape(-1, 3)]
+        plan = bd._orient(t[:, 0, :2], t[:, 1, :2], t[:, 2, :2]) * 0.5
+        # Крыша покрывает ровно контур, за стены не свисает.
+        self.assertAlmostEqual(float(plan.sum()), bd.area(pts), places=6)
+        self.assertGreaterEqual(float(plan.min()), -1e-9)
+        self.assertAlmostEqual(float(rise.min()), 0.0)
+        self.assertAlmostEqual(float(rise.max()), 1.0)
+
+    def test_hipped_ridge_short(self):
+        pts = np.array([[0, 0], [60, 0], [60, 20], [0, 20]],
+                       dtype=np.float64)
+        verts, rise, tri = bd.roof_surface(pts, bd.HIPPED, None, 5.0)
+        self.assertIsNotNone(verts)
+        ridge = verts[rise > 0.5]
+        self.assertLess(float(np.ptp(ridge[:, 0])), 60.0)
+
+    def test_l_shaped_roof(self):
+        # Вогнутый контур кроется целиком: покрытие равно площади
+        # контура, а не прямоугольника вокруг него.
+        pts = np.array([[0, 0], [40, 0], [40, 20], [20, 20], [20, 40],
+                        [0, 40]], dtype=np.float64)
+        verts, rise, tri = bd.roof_surface(pts, bd.GABLED, None, 5.0)
+        self.assertIsNotNone(verts)
+        t = verts[tri.reshape(-1, 3)]
+        plan = bd._orient(t[:, 0, :2], t[:, 1, :2], t[:, 2, :2]) * 0.5
+        self.assertAlmostEqual(float(plan.sum()), bd.area(pts), places=6)
+
+    def test_long_building_ridge_along_long_side(self):
+        # Длинный дом: конёк вдоль длинной стороны, поперёк - ноль.
+        pts = np.array([[0, 0], [100, 0], [100, 10], [0, 10]],
+                       dtype=np.float64)
+        verts, rise, tri = bd.roof_surface(pts, bd.GABLED, None, 5.0)
+        self.assertIsNotNone(verts)
+        ridge = verts[rise > 0.5]
+        self.assertAlmostEqual(float(np.ptp(ridge[:, 0])), 100.0, places=3)
+        self.assertAlmostEqual(float(np.ptp(ridge[:, 1])), 0.0, places=3)
+
+    def test_shaped_footprint_and_mesh(self):
+        data = _tile_roof([[square(100, 100, 40)]], height=10,
+                          roof_shape="gabled", roof_height=4)
+        fp = bd.footprints((14, 0, 0), data)
+        self.assertIsNotNone(fp.roof_tri)
+        self.assertEqual(fp.roof_h[0], 4.0)
+        m = bd.mesh(fp)
+        self.assertTrue(bd.mesh_ok(m))
+        self.assertEqual(len(m.vertices), bd.vertex_count(fp))
+        # Скатная крыша - последние вершины сетки, конёк выше карниза.
+        tri = fp.roof_tri.reshape(-1, 3)
+        pos = m.vertices["position"][-3 * len(tri):].astype(np.float64)
+        _, _, h = ecef_to_geodetic(m.center + pos)
+        self.assertGreater(float(h.max() - h.min()), 2.0)
+
+    def test_roof_ring_after_courtyard(self):
+        # Двор (2 кольца) идёт первым, скат - вторым: крыша второго
+        # должна стоять у его контура, а не у чужого кольца.
+        specs = [
+            ([square(100, 100, 60), square(110, 110, 10)[::-1]],
+             {"render_height": 10}),
+            ([square(20, 20, 10)],
+             {"render_height": 10, "roof_shape": "gabled",
+              "roof_height": 3}),
+        ]
+        fp = bd.footprints((14, 0, 0), _tile_features(specs))
+        self.assertIsNotNone(fp.roof_tri)
+        tri = fp.roof_tri.reshape(-1, 3)
+        mask = fp.roof_owner[tri[:, 0]] == 1
+        self.assertTrue(mask.any())
+        roof = fp.roof_xy[tri[mask]]
+        own = fp.latlon[fp.owner == 1]
+        self.assertLess(abs(float(roof[..., 0].mean() - own[:, 0].mean())),
+                        1e-4)
+        self.assertLess(abs(float(roof[..., 1].mean() - own[:, 1].mean())),
+                        1e-4)
+
+    def test_round_stays_flat(self):
+        data = _tile_roof([[square(100, 100, 40)]], height=10,
+                          roof_shape="round")
+        fp = bd.footprints((14, 0, 0), data)
+        self.assertIsNone(fp.roof_tri)
+        self.assertEqual(len(fp.roof) % 3, 0)
+
+    def test_huge_footprint_stays_flat(self):
+        # Огромный контур (у автора 139x88 м) скат рисует плитой:
+        # выше MAX_ROOF_AREA крыша плоская, просьба автора 19.11.2026.
+        # Тайл (14,0,0) у полюса, единица тайла там ~0.05 м, поэтому
+        # контур в 1000 единиц - около 2700 м².
+        data = _tile_roof([[square(100, 100, 1000)]], height=20,
+                          roof_shape="saltbox")
+        fp = bd.footprints((14, 0, 0), data)
+        self.assertIsNone(fp.roof_tri)
+        self.assertEqual(float(fp.roof_h[0]), 0.0)
+
+    def test_small_footprint_keeps_roof(self):
+        # Дом под порогом площади остаётся со скатом.
+        data = _tile_roof([[square(100, 100, 40)]], height=10,
+                          roof_shape="saltbox")
+        fp = bd.footprints((14, 0, 0), data)
+        self.assertIsNotNone(fp.roof_tri)
+        self.assertGreater(float(fp.roof_h[0]), 0.0)
 
 def _timed(func, *args):
     start = time.perf_counter()
@@ -352,6 +512,92 @@ def _tile(polygons, height=10):
              + _field(3, 2, b"render_height")
              + _field(4, 2, _field(5, 0, height)) + _field(5, 0, 4096))
     return _field(3, 2, layer)
+
+
+def _tile_roof(polygons, height=10, roof_shape=None, roof_height=None):
+    """Тайл со слоем building и полями крыши Overture."""
+    features = b""
+    for rings in polygons:
+        geometry = []
+        x = y = 0
+        for ring in rings:
+            ring = np.asarray(ring, dtype=np.int64)
+            geometry += [9, _zz(int(ring[0, 0]) - x),
+                         _zz(int(ring[0, 1]) - y)]
+            x, y = int(ring[0, 0]), int(ring[0, 1])
+            geometry.append(((len(ring) - 1) << 3) | 2)
+            for px, py in ring[1:]:
+                geometry += [_zz(int(px) - x), _zz(int(py) - y)]
+                x, y = int(px), int(py)
+            geometry.append(15)
+        packed = b"".join(_varint(v) for v in geometry)
+        keys = ["render_height"]
+        values = [_field(5, 0, height)]
+        tags = _varint(0) + _varint(0)
+        for key, value in (("roof_shape", roof_shape),
+                           ("roof_height", roof_height)):
+            if value is None:
+                continue
+            ki, vi = len(keys), len(values)
+            keys.append(key)
+            values.append(
+                _field(1, 2, value.encode()) if isinstance(value, str)
+                else _field(5, 0, int(value)))
+            tags += _varint(ki) + _varint(vi)
+        features += _field(2, 2, _field(2, 2, tags)
+                           + _field(3, 0, 3) + _field(4, 2, packed))
+    layer = _field(15, 0, 2) + _field(1, 2, b"building") + features
+    for key in keys:
+        layer += _field(3, 2, key.encode())
+    for value in values:
+        layer += _field(4, 2, value)
+    return _field(3, 2, layer + _field(5, 0, 4096))
+
+
+def _tile_features(specs):
+    """Тайл со слоем building: список (rings, attrs) с разными полями.
+
+    attrs - словарь поле -> строка или число. Нужен, когда у зданий
+    тайла разные roof_shape (двор и скат в одном тайле).
+    """
+    keys = []
+    values = []
+    key_at = {}
+    value_at = {}
+    features = b""
+    for rings, attrs in specs:
+        geometry = []
+        x = y = 0
+        for ring in rings:
+            ring = np.asarray(ring, dtype=np.int64)
+            geometry += [9, _zz(int(ring[0, 0]) - x),
+                         _zz(int(ring[0, 1]) - y)]
+            x, y = int(ring[0, 0]), int(ring[0, 1])
+            geometry.append(((len(ring) - 1) << 3) | 2)
+            for px, py in ring[1:]:
+                geometry += [_zz(int(px) - x), _zz(int(py) - y)]
+                x, y = int(px), int(py)
+            geometry.append(15)
+        packed = b"".join(_varint(v) for v in geometry)
+        tags = b""
+        for key, value in attrs.items():
+            if key not in key_at:
+                key_at[key] = len(keys)
+                keys.append(key)
+            payload = (_field(1, 2, value.encode()) if isinstance(value, str)
+                       else _field(5, 0, int(value)))
+            if payload not in value_at:
+                value_at[payload] = len(values)
+                values.append(payload)
+            tags += _varint(key_at[key]) + _varint(value_at[payload])
+        features += _field(2, 2, _field(2, 2, tags)
+                           + _field(3, 0, 3) + _field(4, 2, packed))
+    layer = _field(15, 0, 2) + _field(1, 2, b"building") + features
+    for key in keys:
+        layer += _field(3, 2, key.encode())
+    for value in values:
+        layer += _field(4, 2, value)
+    return _field(3, 2, layer + _field(5, 0, 4096))
 
 
 if __name__ == "__main__":

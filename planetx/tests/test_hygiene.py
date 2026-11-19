@@ -668,7 +668,13 @@ def bom(source):
 
 # Чужие файлы, взятые копией без правок: правила модуля их не касаются,
 # их правят в своём хранилище (tools/TEXTS.md, measure.py линейки).
-FOREIGN = {os.path.join("tools", "measure.py")}
+# Порт bpypolyskel - GPL-3, коммит bd1ce5b, правится в его хранилище.
+FOREIGN = {
+    os.path.join("tools", "measure.py"),
+    os.path.join("planetx", "core", "skeleton", "bpypolyskel.py"),
+    os.path.join("planetx", "core", "skeleton", "bpyeuclid.py"),
+    os.path.join("planetx", "core", "skeleton", "poly2FacesGraph.py"),
+}
 
 
 def python_files():

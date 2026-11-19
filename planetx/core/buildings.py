@@ -39,6 +39,7 @@ try:  # внутри плагина QGIS
     from .features import centered
     from .places import (EXTENT, _fields, _packed, _unpack, _value,
                          _zigzag)
+    from .skeleton import Vector, polygonize
     from .tiling import lat_of_row, lonlat_to_tile, tile_bounds
 except ImportError:  # headless-тесты
     import ellipsoid
@@ -46,6 +47,7 @@ except ImportError:  # headless-тесты
                            surface_normal)
     from features import centered
     from places import EXTENT, _fields, _packed, _unpack, _value, _zigzag
+    from skeleton import Vector, polygonize
     from tiling import lat_of_row, lonlat_to_tile, tile_bounds
 
 LAYER = "building"
@@ -57,6 +59,49 @@ DEFAULT_HEIGHT = 5.0
 # Цвет здания без поля colour. Величину назначил помощник 29 сентября
 # 2026 года, её утверждает автор.
 DEFAULT_COLOR = (226, 222, 214)
+# Формы крыш Overture Maps (roof_shape). 0 - плоская крыша, её несут
+# и прочие значения: round, dome, onion, sawtooth, butterfly, spherical.
+FLAT = 0
+GABLED = 1
+HIPPED = 2
+PYRAMIDAL = 3
+HALF_HIPPED = 4
+SALTBOX = 5
+GAMBREL = 6
+MANSARD = 7
+ROOF_SHAPES = {
+    # Плоская: сама flat и то, что по эталону крыши не даёт.
+    "flat": FLAT, "none": FLAT, "unknown": FLAT, "complex": FLAT,
+    "many": FLAT, "mixed": FLAT, "mix": FLAT, "multi": FLAT,
+    "gabled_row": FLAT,
+    # Двускатные: gabled и его варианты, включая алиасы эталона.
+    "gabled": GABLED, "saltbox": SALTBOX, "gambrel": GAMBREL,
+    "mansard": MANSARD, "pitched": GABLED,
+    "gabled_height_moved": GABLED, "gabled_irregular": GABLED,
+    "double_saltbox": GABLED, "quadruple_saltbox": GABLED,
+    "hipped": HIPPED, "side_hipped": HIPPED,
+    "hipped_and_gabled": HIPPED,
+    "half_hipped": HALF_HIPPED, "side_half_hipped": HALF_HIPPED,
+    "pyramidal": PYRAMIDAL, "pyramid": PYRAMIDAL,
+    # Кривые и пилообразные пока не рисуются: остаются плоскими.
+    "skillion": FLAT, "lean_to": FLAT, "monopitch": FLAT, "shed": FLAT,
+    "sawtooth": FLAT, "round": FLAT, "dome": FLAT, "onion": FLAT,
+    "spherical": FLAT, "cone": FLAT, "butterfly": FLAT,
+    "crosspitched": FLAT, "bellcast_gable": FLAT,
+}
+# Крутизна ската по умолчанию, градусы. По ней оценивается высота крыши,
+# когда в тайле нет roof_height. 30 - как в OSM Buildings и maplibre-landmarks.
+ROOF_PITCH = 30.0
+# Крыша ниже этого не рисуется, метры: от низкой крыши одна рябь.
+MIN_ROOF = 0.5
+# Контур больше этого - плоская крыша, м². У огромных домов в Overture
+# часто ошибочный скат, а подъём упирается в половину стены, и скат на
+# 140x90 м читается плоской плитой. Просьба автора от 19 ноября 2026
+# года: 5422 м² saltbox в его районе, 58.020797, 56.276039.
+MAX_ROOF_AREA = 2000.0
+# Цвет скатов по умолчанию, RGB: как в OSM Buildings. Фронтоны (торцы,
+# вальмовые свесы) остаются цветом стены.
+ROOF_COLOR = (185, 169, 154)
 # Дальность показа от глаза, метры, и бюджет: тайлов и вершин в
 # видеокарте. Величины помощника, автор утвердил их 29 сентября 2026
 # года. Вершина - 20 байт, 1.5 млн вершин - около 30 МБ.
@@ -69,23 +114,38 @@ EMPTY = "empty"
 VERTEX = np.dtype([("position", "<f4", 3), ("normal", "i1", 4),
                    ("color", "u1", 4)])
 
-Building = namedtuple("Building", "rings height base color")
+Roof = namedtuple("Roof", "shape direction height")
+Roof.__doc__ = """Крыша здания Overture.
+
+shape - FLAT..PYRAMIDAL. direction - азимут конька в градусах или
+None. height - высота ската в метрах или None, тогда оценивается по
+ROOF_PITCH.
+"""
+
+Building = namedtuple("Building", "rings height base color roof")
 Building.__doc__ = """Здание из тайла.
 
 rings - кольца в единицах тайла, массивы (n, 2) без повтора первой
 точки. Первое - контур с положительной площадью, дальше дворы
 с отрицательной. height - высота крыши над землёй, base - высота
-низа, метры. color - RGB 0-255 или None.
+низа, метры. color - RGB 0-255 или None. roof - запись Roof.
 """
 
-Footprint = namedtuple("Footprint",
-                       "key latlon next wall owner height base color roof")
+Footprint = namedtuple(
+    "Footprint",
+    "key latlon next wall owner height base color roof "
+    "roof_h roof_xy roof_rise roof_tri roof_owner",
+    defaults=(None, None, None, None, None))
 Footprint.__doc__ = """Здания тайла без высот рельефа.
 
 latlon - все точки колец (N, 2) в градусах. next - номер следующей
 точки кольца. wall - ставится ли стена на ребре от точки к следующей.
 owner - номер здания точки. height, base - по зданиям, метры. color -
-по зданиям (B, 3) uint8. roof - треугольники крыш, номера точек uint32.
+по зданиям (B, 3) uint8. roof - треугольники плоских крыш, номера
+точек uint32. roof_h - высота ската по зданиям, метры (0 - плоская).
+roof_xy - точки скатных крыш (R, 2) в градусах, roof_rise - их подъём
+0-1, roof_tri - треугольники (номера точек R), roof_owner - здание
+точки. Поля скатных крыш есть только когда они есть в тайле.
 """
 
 Mesh = namedtuple("Mesh", "key center vertices indices")
@@ -208,16 +268,17 @@ def _buildings(fields, keys, raw):
         if height <= base:
             continue
         color = parse_color(attrs.get("colour") or attrs.get("facade_color"))
+        roof = roof_attrs(attrs)
         rings = []
         for ring, s in _rings(geometry):
             if s > 0.0:
                 if rings:
-                    out.append(Building(rings, height, base, color))
+                    out.append(Building(rings, height, base, color, roof))
                 rings = [ring]
             elif s < 0.0 and rings:
                 rings.append(ring)
         if rings:
-            out.append(Building(rings, height, base, color))
+            out.append(Building(rings, height, base, color, roof))
     return out
 
 
@@ -236,6 +297,36 @@ def heights(attrs):
     if not base and attrs.get("min_floor"):
         base = float(attrs["min_floor"]) * FLOOR
     return float(height or DEFAULT_HEIGHT), float(base or 0.0)
+
+
+def roof_attrs(attrs):
+    """Крыша Overture: форма, азимут конька, высота ската.
+
+    Название формы по эталону (OSM2World/maplibre-landmarks) сверяется
+    без учёта регистра, а "_" и "-" равнозначны: half-hipped и
+    half_hipped - одно и то же. Незнакомые значения - плоская крыша,
+    как и flat, many, mixed, gabled_row.
+    """
+    name = (attrs.get("roof_shape") or "").strip().lower()
+    name = name.replace("-", "_").replace(" ", "_")
+    shape = ROOF_SHAPES.get(name, FLAT)
+    direction = attrs.get("roof_direction")
+    if direction in (None, ""):
+        direction = None
+    else:
+        try:
+            direction = float(str(direction).replace(",", "."))
+        except ValueError:
+            direction = None
+    height = attrs.get("roof_height")
+    if height in (None, ""):
+        height = None
+    else:
+        try:
+            height = float(str(height).replace(",", "."))
+        except ValueError:
+            height = None
+    return Roof(shape, direction, height)
 
 
 def _clip_side(points, axis, limit, below):
@@ -416,6 +507,321 @@ def _cut(points, ring):
                       dtype=np.uint32)
 
 
+def _centroid(points):
+    """Центроид кольца без повтора первой точки."""
+    x, y = points[:, 0], points[:, 1]
+    cross = x * np.roll(y, -1) - np.roll(x, -1) * y
+    twice = float(cross.sum())
+    if twice == 0.0:
+        return points.mean(axis=0)
+    cx = float(np.dot(x + np.roll(x, -1), cross) / (3.0 * twice))
+    cy = float(np.dot(y + np.roll(y, -1), cross) / (3.0 * twice))
+    return np.array([cx, cy])
+
+
+def _face(roof):
+    """Куда смотрит главный скат, единичный вектор, или None."""
+    if roof.direction is None:
+        return None
+    a = math.radians(roof.direction)
+    return np.array([math.sin(a), -math.cos(a)])
+
+
+def _roof_frame(points, direction):
+    """Рамка крыши: центр, оси u (вдоль конька) и v, полуразмеры L, W.
+
+    Без roof_direction ось конька - та, поперёк которой контур уже
+    всего: конёк идёт вдоль длинной стороны.
+    """
+    if direction is not None:
+        u = np.array([-direction[1], direction[0]], dtype=np.float64)
+    else:
+        best = None
+        for deg in range(0, 180, 2):
+            a = math.radians(deg)
+            cand = np.array([math.cos(a), math.sin(a)])
+            pv = points @ np.array([-cand[1], cand[0]])
+            width = float(pv.max() - pv.min())
+            if best is None or width < best[0] - 1e-9:
+                best = (width, cand)
+        u = best[1]
+    norm = float(np.hypot(u[0], u[1]))
+    if norm <= 0.0:
+        return None
+    u = u / norm
+    v = np.array([-u[1], u[0]])
+    pu = points @ u
+    pv = points @ v
+    cu = 0.5 * (float(pu.min()) + float(pu.max()))
+    cv = 0.5 * (float(pv.min()) + float(pv.max()))
+    half_l = 0.5 * float(pu.max() - pu.min())
+    half_w = 0.5 * float(pv.max() - pv.min())
+    return u * cu + v * cv, u, v, half_l, half_w
+
+
+def _roof_profile(shape, height, half_l, half_w):
+    """Плоскости скатов: h = a*u + b*v + c; высота крыши - наименьшая.
+
+    Профиль - как в maplibre-landmarks: крыша задана плоскостями, а
+    контур лишь режется по линиям, где плоскости пересекаются.
+    """
+    if half_l <= 0.0 or half_w <= 0.0:
+        return None
+    if shape == PYRAMIDAL:
+        shape = HIPPED
+    gable = [(0.0, -height / half_w, height),
+             (0.0, height / half_w, height)]
+    if shape == GABLED:
+        return [gable]
+    if shape == HIPPED:
+        return [gable + [(-height / half_w, 0.0, height * half_l / half_w),
+                         (height / half_w, 0.0, height * half_l / half_w)]]
+    if shape == HALF_HIPPED:
+        return [gable + [(-height / half_w, 0.0,
+                          0.5 * height + height * half_l / half_w),
+                         (height / half_w, 0.0,
+                          0.5 * height + height * half_l / half_w)]]
+    if shape == SALTBOX:
+        # Конёк смещён на треть полуширины: скаты разной длины.
+        r = half_w / 3.0
+        lo, hi = half_w - r, half_w + r
+        return [[(0.0, -height / lo, height * half_w / lo),
+                 (0.0, height / hi, height * half_w / hi)]]
+
+    def sides(s):
+        # Бока gambrel/mansard: крутой низ до 0.6 H, пологий верх до H.
+        return [(0.0, -s * 1.8 * height / half_w, 1.8 * height),
+                (0.0, -s * 0.6 * height / half_w, height)]
+    if shape == GAMBREL:
+        return [sides(1) + sides(-1)]
+    if shape == MANSARD:
+        def ends(s):
+            # Торцы с теми же уклонами, от карниза торца (u = +-L).
+            return [(-s * 1.8 * height / half_w, 0.0,
+                     1.8 * height * half_l / half_w),
+                    (-s * 0.6 * height / half_w, 0.0,
+                     0.4 * height + 0.6 * height * half_l / half_w)]
+        return [sides(1) + sides(-1) + ends(1) + ends(-1)]
+    return None
+
+
+def _roof_at(groups, pu, pv):
+    """Высота крыши в точке рамки: наибольшая из низших плоскостей."""
+    best = 0.0
+    for group in groups:
+        low = min(a * pu + b * pv + c for a, b, c in group)
+        if low > best:
+            best = low
+    return best
+
+
+def _roof_creases(groups, box):
+    """Линии перегиба: где две плоскости профиля равны."""
+    planes = [p for group in groups for p in group]
+    out = []
+    seen = set()
+    for i in range(len(planes)):
+        for j in range(i + 1, len(planes)):
+            a = planes[i][0] - planes[j][0]
+            b = planes[i][1] - planes[j][1]
+            c = planes[i][2] - planes[j][2]
+            norm = math.hypot(a, b)
+            if norm < 1e-9:
+                continue
+            a, b, c = a / norm, b / norm, c / norm
+            if a < -1e-9 or (abs(a) <= 1e-9 and b < 0.0):
+                a, b, c = -a, -b, -c
+            key = (round(a, 6), round(b, 6), round(c, 6))
+            if key in seen:
+                continue
+            seen.add(key)
+            corners = [(box[0], box[1]), (box[2], box[1]),
+                       (box[2], box[3]), (box[0], box[3])]
+            side = [a * u + b * v + c for u, v in corners]
+            if all(x > 1e-9 for x in side) or all(x < -1e-9 for x in side):
+                continue
+            out.append((a, b, c))
+    return out
+
+
+def _cut_piece(piece, line, side):
+    """Часть выпуклого куска по одну сторону прямой a*u + b*v + c = 0."""
+    a, b, c = line
+    out = []
+    n = len(piece)
+    for i in range(n):
+        p = piece[i]
+        q = piece[(i + 1) % n]
+        sp = side * (a * p[0] + b * p[1] + c)
+        sq = side * (a * q[0] + b * q[1] + c)
+        if sp >= 0.0:
+            out.append(p)
+        if (sp > 0.0 and sq < 0.0) or (sp < 0.0 and sq > 0.0):
+            t = sp / (sp - sq)
+            out.append((p[0] + (q[0] - p[0]) * t,
+                        p[1] + (q[1] - p[1]) * t))
+    return out
+
+
+def _roof_rise(roof, height, base, points, scale=1.0):
+    """Высота ската крыши в метрах, 0.0 - крыша плоская.
+
+    Явная roof_height берётся как есть, не выше высоты здания. Иначе
+    ROOF_PITCH по полуширине поперёк конька, не выше половины высоты
+    здания. Ниже MIN_ROOF скат не рисуется: от него одна рябь.
+    """
+    wall = height - base
+    if roof.shape == FLAT or wall <= 0.0:
+        return 0.0
+    if roof.height is not None and roof.height > 0.0:
+        return min(max(roof.height, 0.0), wall)
+    frame = _roof_frame(points, _face(roof))
+    if frame is None:
+        return 0.0
+    half = min(frame[3], frame[4])
+    rise = math.tan(math.radians(ROOF_PITCH)) * half * scale
+    rise = min(rise, 0.5 * wall)
+    return rise if rise >= MIN_ROOF else 0.0
+
+
+def roof_surface(points, kind, direction, rise=0.0):
+    """Скатная крыша по контуру: профиль, контур режется по перегибам.
+
+    points - контур (n, 2) в осях тайла. kind - GABLED, HIPPED,
+    HALF_HIPPED или PYRAMIDAL. direction - куда смотрит главный скат
+    или None. rise - высота крыши в единицах тайла. Подъём вершины
+    0 - карниз, 1 - конёк. Крыша покрывает сам контур и за стены не
+    свисает. None - крыша остаётся плоской.
+    """
+    if kind not in (GABLED, HIPPED, HALF_HIPPED, PYRAMIDAL,
+                    SALTBOX, GAMBREL, MANSARD) or rise <= 0.0:
+        return None
+    frame = _roof_frame(points, direction)
+    if frame is None:
+        return None
+    centre, u, v, half_l, half_w = frame
+    if half_l <= 0.25 or half_w <= 0.25:
+        return None
+    groups = _roof_profile(kind, float(rise), half_l, half_w)
+    if groups is None:
+        return None
+    rel = points - centre
+    pu = rel @ u
+    pv = rel @ v
+    box = (float(pu.min()), float(pv.min()),
+           float(pu.max()), float(pv.max()))
+    lines = _roof_creases(groups, box)
+    # Контур -> выпуклые треугольники -> разрезать по линиям перегиба.
+    pieces = []
+    for t in ear_clip(points):
+        piece = [(float(pu[k]), float(pv[k])) for k in t]
+        if _orient(np.array(piece[0]), np.array(piece[1]),
+                   np.array(piece[2])) < 0.0:
+            piece = [piece[0], piece[2], piece[1]]
+        pieces.append(piece)
+    for line in lines:
+        cut = []
+        for piece in pieces:
+            cut.append(_cut_piece(piece, line, 1.0))
+            cut.append(_cut_piece(piece, line, -1.0))
+        pieces = [p for p in cut if len(p) >= 3]
+    verts = []
+    fractions = []
+    tris = []
+
+    def add(ux, vy, frac):
+        verts.append(u * ux + v * vy + centre)
+        fractions.append(frac)
+
+    for piece in pieces:
+        base = len(verts)
+        for ux, vy in piece:
+            add(ux, vy, _roof_at(groups, ux, vy) / float(rise))
+        for k in range(1, len(piece) - 1):
+            tris.extend([base, base + k, base + k + 1])
+    # Щель между карнизом и краем крыши закрывается отвесной стенкой.
+    n = len(pu)
+    for i in range(n):
+        j = (i + 1) % n
+        ts = [0.0, 1.0]
+        for a, b, c in lines:
+            sp = a * pu[i] + b * pv[i] + c
+            sq = a * pu[j] + b * pv[j] + c
+            if sp * sq < 0.0:
+                ts.append(sp / (sp - sq))
+        ts.sort()
+        for k in range(len(ts) - 1):
+            t0, t1 = ts[k], ts[k + 1]
+            u0 = pu[i] + (pu[j] - pu[i]) * t0
+            v0 = pv[i] + (pv[j] - pv[i]) * t0
+            u1 = pu[i] + (pu[j] - pu[i]) * t1
+            v1 = pv[i] + (pv[j] - pv[i]) * t1
+            h0 = _roof_at(groups, u0, v0)
+            h1 = _roof_at(groups, u1, v1)
+            if h0 < 1e-6 and h1 < 1e-6:
+                continue
+            base = len(verts)
+            add(u0, v0, 0.0)
+            add(u1, v1, 0.0)
+            add(u1, v1, h1 / float(rise))
+            add(u0, v0, h0 / float(rise))
+            tris.extend([base, base + 1, base + 2,
+                         base, base + 2, base + 3])
+    if not tris:
+        return None
+    return (np.vstack(verts), np.asarray(fractions, dtype=np.float64),
+            np.asarray(tris, dtype=np.uint32))
+
+
+def _skeleton_surface(points, rise):
+    """Вальмовая крыша по прямому скелету bpypolyskel.
+
+    points - контур (n, 2) без дворов в осях тайла. rise - высота крыши
+    в единицах тайла. Отдаёт тот же набор, что и roof_surface: (вершины
+    (m,2), подъём 0-1, треугольники). None - скелет не вышел, зовущий
+    оставляет плоскости. Скелет строит по одной грани на сторону, так
+    что контур покрывается целиком и отвесные фронтоны не нужны.
+    """
+    n = len(points)
+    if n < 3 or rise <= 0.0:
+        return None
+    # Контур должен идти против часовой стрелки, знаком как у _orient.
+    if float(_orient(points[np.arange(n) - 1], points,
+                     points[(np.arange(n) + 1) % n]).sum()) < 0.0:
+        points = points[::-1]
+    verts = [Vector((float(points[i, 0]), float(points[i, 1]), 0.0))
+             for i in range(n)]
+    try:
+        faces = polygonize(verts, 0, n, None, float(rise), 0.0, None, None)
+    except (AttributeError, ArithmeticError, IndexError, KeyError,
+            RecursionError, StopIteration, TypeError, ValueError):
+        return None
+    if not faces or len(verts) <= n:
+        return None
+    for face in faces:
+        if len(face) < 3 or len(face) != len(set(face)):
+            return None
+    total = len(verts)
+    coords = np.empty((total, 2), dtype=np.float64)
+    fractions = np.empty(total, dtype=np.float64)
+    for i, v in enumerate(verts):
+        coords[i, 0] = v.x
+        coords[i, 1] = v.y
+        fractions[i] = min(max(v.z / float(rise), 0.0), 1.0)
+    tris = []
+    for face in faces:
+        poly = coords[face]
+        area = float(_orient(np.roll(poly, 1, axis=0), poly,
+                             np.roll(poly, -1, axis=0)).sum())
+        if area < 0.0:  # грань должна быть против часовой, как у ear_clip
+            face = face[::-1]
+        for t in ear_clip(coords[face]):
+            tris.extend((face[t[0]], face[t[1]], face[t[2]]))
+    if not tris:
+        return None
+    return (coords, fractions, np.asarray(tris, dtype=np.uint32))
+
+
 def _fans(starts, counts):
     """Треугольники веером у колец с первой точкой starts и counts
     точками, одной операцией NumPy."""
@@ -495,20 +901,81 @@ def footprints(key, data):
     concave = np.logical_or.reduceat(turn < -1e-9 * size, starts)
     single = np.array(ring_count) == 1
     ring_of_building = np.cumsum([0] + ring_count[:-1])
-    fan = single & ~concave[ring_of_building]
+    heights = np.array([b.height for b in kept])
+    bases = np.array([b.base for b in kept])
+    color = np.array([b.color or DEFAULT_COLOR for b in kept], dtype=np.uint8)
+    # Метров в единице тайла: контур для ската - в единицах тайла, а
+    # высота ската - в метрах.
+    _, south, _, north = tile_bounds(*key)
+    lat0 = math.radians(0.5 * (float(south) + float(north)))
+    scale = 2.0 * math.pi * ellipsoid.A * math.cos(lat0) \
+        / (1 << key[0]) / extent
+    # Скатные крыши - у выпуклых контуров без дворов и с высотой ската.
+    roof_h = np.zeros(len(kept))
+    surfaces = []  # (номер здания, (вершины тайла, подъём, треугольники))
+    for b in range(len(kept)):
+        shape = kept[b].roof.shape
+        if shape not in (GABLED, HIPPED, PYRAMIDAL,
+                         SALTBOX, GAMBREL, MANSARD) or not single[b]:
+            continue
+        first = int(ring_of_building[b])
+        ring = xy[starts[first]:starts[first] + sizes[first]]
+        if abs(area(ring)) * scale * scale > MAX_ROOF_AREA:
+            continue  # огромный контур: скат на нём читается плитой
+        direction = _face(kept[b].roof)
+        rise = _roof_rise(kept[b].roof, heights[b], bases[b], ring, scale)
+        if rise <= 0.0:
+            continue
+        surface = None
+        if shape in (HIPPED, PYRAMIDAL) and (sizes[first] > 4
+                                             or concave[first]):
+            # Сложный контур - вальмовая крыша по прямому скелету,
+            # прямоугольник остаётся на плоскостях.
+            surface = _skeleton_surface(ring, rise / scale)
+        if surface is None:
+            surface = roof_surface(ring, shape, direction, rise / scale)
+        if surface is None:
+            continue
+        roof_h[b] = rise
+        surfaces.append((b, surface))
+    shaped = np.zeros(len(kept), dtype=bool)
+    for b, _ in surfaces:
+        shaped[b] = True
+    # Плоские крыши - у прочих зданий.
+    flat_mask = ~shaped
+    fan = flat_mask & single & ~concave[ring_of_building]
     fan_rings = ring_of_building[fan]
     triangles = [_fans(starts[fan_rings], np.array(sizes)[fan_rings])]
-    for b in np.nonzero(~fan)[0].tolist():
+    for b in np.nonzero(flat_mask & ~fan)[0].tolist():
         first = int(ring_of_building[b])
         rings = [list(range(starts[r], starts[r] + sizes[r]))
                  for r in range(first, first + ring_count[b])]
         triangles.append(roof(xy, rings))
-    color = np.array([b.color or DEFAULT_COLOR for b in kept],
-                     dtype=np.uint8)
+    flat_roof = np.concatenate(triangles).astype(np.uint32) if triangles \
+        else np.zeros(0, dtype=np.uint32)
+    # Точки скатных крыш - в градусах, их подъём 0-1 и треугольники.
+    roof_xy = []
+    roof_rise = []
+    roof_tri = []
+    roof_owner = []
+    offset = 0
+    for b, (verts, rise, tris) in surfaces:
+        roof_xy.append(tile_latlon(key, extent, verts))
+        roof_rise.append(rise)
+        roof_tri.append(tris.astype(np.uint32) + np.uint32(offset))
+        roof_owner.append(np.full(len(verts), b, dtype=np.int64))
+        offset += len(verts)
+    if not roof_xy:
+        roof_xy = roof_rise = roof_owner = None
+        roof_tri = None
+    else:
+        roof_xy = np.vstack(roof_xy)
+        roof_rise = np.concatenate(roof_rise)
+        roof_tri = np.concatenate(roof_tri).astype(np.uint32)
+        roof_owner = np.concatenate(roof_owner)
     return Footprint(key, tile_latlon(key, extent, xy), nxt, ~border, owner,
-                     np.array([b.height for b in kept]),
-                     np.array([b.base for b in kept]), color,
-                     np.concatenate(triangles).astype(np.uint32))
+                     heights, bases, color, flat_roof, roof_h, roof_xy,
+                     roof_rise, roof_tri, roof_owner)
 
 
 def _normals(vectors):
@@ -524,45 +991,84 @@ def mesh(footprint, heights_at=None):
     """Сетка зданий по высотам рельефа.
 
     heights_at - высоты массива точек (широты, долготы), None - земля
-    на эллипсоиде. Низ здания - наименьшая высота под его точками.
+    на эллипсоиде. Отметка дома - наивысшая точка рельефа под его
+    точками: от низкой на склоне дом уходил под землю. Стена
+    поднимается до карниза (height - roof_h), скатная крыша лежит от
+    карниза до конька.
     """
     fp = footprint
     lat, lon = fp.latlon[:, 0], fp.latlon[:, 1]
-    if heights_at is None:
-        ground = np.zeros(len(lat))
-    else:
-        ground = np.asarray(heights_at(lat, lon), dtype=np.float64)
-    low = np.full(len(fp.height), np.inf)
-    np.minimum.at(low, fp.owner, ground)
-    top = geodetic_to_ecef(lat, lon, (low + fp.height)[fp.owner])
-    bottom = geodetic_to_ecef(lat, lon, (low + fp.base)[fp.owner])
+    ground = np.zeros(len(lat)) if heights_at is None \
+        else np.asarray(heights_at(lat, lon), dtype=np.float64)
+    high = np.full(len(fp.height), -np.inf)
+    np.maximum.at(high, fp.owner, ground)
+    roof_h = np.zeros(len(fp.height)) if fp.roof_h is None else fp.roof_h
+    eave = (high + fp.height - roof_h)[fp.owner]
+    top = (high + fp.height)[fp.owner]
+    top_ecef = geodetic_to_ecef(lat, lon, top)
+    eave_ecef = geodetic_to_ecef(lat, lon, eave)
+    bottom = geodetic_to_ecef(lat, lon, (high + fp.base)[fp.owner])
     up = surface_normal(lat, lon)
     i = np.nonzero(fp.wall)[0]
     j = fp.next[i]
     # Кольцо контура идёт против часовой стрелки в координатах тайла,
     # это по часовой, если смотреть сверху. Наружу смотрит up × ребро.
     outward = np.cross(up[i], bottom[j] - bottom[i])
-    corners = np.stack([bottom[i], bottom[j], top[j], top[i]], axis=1)
-    positions = np.vstack([corners.reshape(-1, 3), top])
-    center, offsets = centered(positions)
+    corners = np.stack([bottom[i], bottom[j], eave_ecef[j], eave_ecef[i]],
+                       axis=1)
     count = len(i)
+    positions = [corners.reshape(-1, 3), top_ecef]
+    normals = [np.repeat(_normals(outward), 4, axis=0), _normals(up)]
+    rgb = fp.color[fp.owner]
+    colors = [np.repeat(rgb[i], 4, axis=0), rgb]
+    # Скатные крыши: по три вершины на треугольник, у каждой своя нормаль.
+    if fp.roof_tri is not None and len(fp.roof_tri):
+        rlat, rlon = fp.roof_xy[:, 0], fp.roof_xy[:, 1]
+        owner = fp.roof_owner
+        up_r = surface_normal(rlat, rlon)
+        rtop = (high + fp.height - roof_h)[owner] \
+            + fp.roof_rise * roof_h[owner]
+        r_ecef = geodetic_to_ecef(rlat, rlon, rtop)
+        tri = fp.roof_tri.reshape(-1, 3)
+        t = r_ecef[tri]
+        n = np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0])
+        up_t = up_r[tri].mean(axis=1)
+        n = np.where((n * up_t).sum(axis=1)[:, None] < 0.0, -n, n)
+        positions.append(t.reshape(-1, 3))
+        normals.append(np.repeat(_normals(n), 3, axis=0))
+        # Скаты - цветом крыши, торцы (фронтоны, вальмы) - цветом стены,
+        # как в OSM Buildings: иначе фронтон выглядит ещё одним скатом.
+        length = np.linalg.norm(n, axis=1)
+        flat = np.abs((n * up_t).sum(axis=1)) > 0.25 * length
+        roof_rgb = np.tile(np.asarray(ROOF_COLOR, dtype=np.uint8),
+                           (len(tri), 1))
+        wall_rgb = fp.color[owner[tri[:, 0]]]
+        rgb = np.where(flat[:, None], roof_rgb, wall_rgb)
+        colors.append(np.repeat(rgb, 3, axis=0))
+    positions = np.vstack(positions)
+    center, offsets = centered(positions)
     vertices = np.zeros(len(positions), dtype=VERTEX)
     vertices["position"] = offsets
-    vertices["normal"][:4 * count] = np.repeat(_normals(outward), 4, axis=0)
-    vertices["normal"][4 * count:] = _normals(up)
-    rgb = fp.color[fp.owner]
-    vertices["color"][:4 * count, :3] = np.repeat(rgb[i], 4, axis=0)
-    vertices["color"][4 * count:, :3] = rgb
+    vertices["normal"] = np.vstack(normals)
+    vertices["color"][:, :3] = np.vstack(colors)
     vertices["color"][:, 3] = 255
     quad = np.arange(count, dtype=np.uint32)[:, None] * 4
     walls = (quad + np.array([0, 1, 2, 0, 2, 3], dtype=np.uint32)).ravel()
-    indices = np.concatenate([walls, fp.roof + np.uint32(4 * count)])
-    return Mesh(fp.key, center, vertices, indices.astype(np.uint32))
+    indices = [walls, fp.roof + np.uint32(4 * count)]
+    if fp.roof_tri is not None and len(fp.roof_tri):
+        shaped_base = 4 * count + len(fp.latlon)
+        indices.append(np.arange(len(fp.roof_tri), dtype=np.uint32)
+                       + np.uint32(shaped_base))
+    indices = np.concatenate(indices).astype(np.uint32)
+    return Mesh(fp.key, center, vertices, indices)
 
 
 def vertex_count(footprint):
-    """Вершин в сетке тайла: по 4 на стену и по одной на точку крыши."""
-    return 4 * int(np.count_nonzero(footprint.wall)) + len(footprint.latlon)
+    """Вершин в сетке тайла: по 4 на стену, по точке на плоскую крышу
+    и по три на треугольник скатной крыши."""
+    shaped = 0 if footprint.roof_tri is None else len(footprint.roof_tri)
+    return 4 * int(np.count_nonzero(footprint.wall)) \
+        + len(footprint.latlon) + shaped
 
 
 def near_tiles(eye, forward, ground=0.0, reach=RANGE, limit=MAX_TILES):
