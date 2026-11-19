@@ -802,8 +802,16 @@ def _skeleton_surface(points, rise):
              for i in range(n)]
     try:
         faces = polygonize(verts, 0, n, None, float(rise), 0.0, None, None)
-    except (AttributeError, ArithmeticError, IndexError, KeyError,
-            RecursionError, StopIteration, TypeError, ValueError):
+    except (AssertionError, AttributeError, ArithmeticError, IndexError,
+            KeyError, RecursionError, RuntimeError, StopIteration,
+            TypeError, ValueError):
+        # Скелет сдаётся на плохом контуре - здание остаётся на плоскостях.
+        # Ловится конкретное: порт бросает RuntimeError на кольце ссылок,
+        # AssertionError на чужой вершине, ValueError и TypeError из
+        # vector.py. Сторожа зацикливания бросают голое Exception
+        # ('Endless loop in spike removal' в bpypolyskel.py и 'Endless
+        # loop catched in poly2FacesGraph faces()' в poly2FacesGraph.py):
+        # их не ловим, это чужой код, см. AGENTS.md.
         return None
     if not faces or len(verts) <= n:
         return None
