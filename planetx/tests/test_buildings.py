@@ -309,8 +309,26 @@ class TestRoofShapes(unittest.TestCase):
         self.assertEqual(bd.roof_attrs({"roof_shape": "half-hipped"}).shape,
                          bd.HALF_HIPPED)
         self.assertEqual(bd.roof_attrs({"roof_shape": "round"}).shape,
-                         bd.FLAT)
+                         bd.ROUND)
         self.assertEqual(bd.roof_attrs({}).shape, bd.FLAT)
+        # Односкатные: skillion и его имена в Overture.
+        for name in ("skillion", "lean_to", "lean-to", "monopitch", "shed"):
+            self.assertEqual(bd.roof_attrs({"roof_shape": name}).shape,
+                             bd.SKILLION)
+        # Кривые и пилообразные профили эталона.
+        for name, kind in (("round", bd.ROUND),
+                           ("bellcast_gable", bd.BELLCAST_GABLE),
+                           ("bellcast-gable", bd.BELLCAST_GABLE),
+                           ("butterfly", bd.BUTTERFLY),
+                           ("crosspitched", bd.CROSSPITCHED),
+                           ("sawtooth", bd.SAWTOOTH)):
+            self.assertEqual(bd.roof_attrs({"roof_shape": name}).shape,
+                             kind)
+        # Тела вращения: купол, луковица, конус.
+        for name, kind in (("dome", bd.DOME), ("spherical", bd.DOME),
+                           ("onion", bd.ONION), ("cone", bd.CONE)):
+            self.assertEqual(bd.roof_attrs({"roof_shape": name}).shape,
+                             kind)
 
     def test_rise(self):
         pts = square(0, 0, 40)
@@ -368,6 +386,28 @@ class TestRoofShapes(unittest.TestCase):
         plan = bd._orient(t[:, 0, :2], t[:, 1, :2], t[:, 2, :2]) * 0.5
         self.assertAlmostEqual(float(plan.sum()), bd.area(pts), places=6)
 
+    def test_skillion_one_slope(self):
+        # Односкатная: одна плоскость от карниза до верха стены.
+        # До правки skillion считался плоским и профиля не было вовсе.
+        groups = bd._roof_profile(bd.SKILLION, 5.0, 20.0, 10.0)
+        self.assertEqual(len(groups), 1)
+        self.assertAlmostEqual(bd._roof_at(groups, 0.0, -10.0), 0.0)
+        self.assertAlmostEqual(bd._roof_at(groups, 0.0, 0.0), 2.5)
+        self.assertAlmostEqual(bd._roof_at(groups, 0.0, 10.0), 5.0)
+        pts = np.array([[0, 0], [40, 0], [40, 20], [0, 20]],
+                       dtype=np.float64)
+        verts, rise, tri = bd.roof_surface(pts, bd.SKILLION, None, 5.0)
+        self.assertIsNotNone(verts)
+        t = verts[tri.reshape(-1, 3)]
+        plan = bd._orient(t[:, 0, :2], t[:, 1, :2], t[:, 2, :2]) * 0.5
+        # Отвесные полосы под краем крыши в плане нулевые.
+        self.assertAlmostEqual(float(plan.sum()), bd.area(pts), places=6)
+        self.assertAlmostEqual(float(rise.min()), 0.0)
+        self.assertAlmostEqual(float(rise.max()), 1.0)
+        high = verts[rise > 1.0 - 1e-6]
+        # Верхняя кромка идёт вдоль длинной стороны: конька посередине нет.
+        self.assertAlmostEqual(float(np.ptp(high[:, 1])), 0.0, places=6)
+
     def test_long_building_ridge_along_long_side(self):
         # Длинный дом: конёк вдоль длинной стороны, поперёк - ноль.
         pts = np.array([[0, 0], [100, 0], [100, 10], [0, 10]],
@@ -415,12 +455,95 @@ class TestRoofShapes(unittest.TestCase):
         self.assertLess(abs(float(roof[..., 1].mean() - own[:, 1].mean())),
                         1e-4)
 
-    def test_round_stays_flat(self):
+    def test_round_roof(self):
+        # До правки round считался плоским; теперь полукруглый профиль.
         data = _tile_roof([[square(100, 100, 40)]], height=10,
                           roof_shape="round")
         fp = bd.footprints((14, 0, 0), data)
-        self.assertIsNone(fp.roof_tri)
-        self.assertEqual(len(fp.roof) % 3, 0)
+        self.assertIsNotNone(fp.roof_tri)
+        self.assertGreater(float(fp.roof_h[0]), 0.0)
+        self.assertTrue(bd.mesh_ok(bd.mesh(fp)))
+
+    def test_profile_shapes_cover(self):
+        # Кривые и пилообразные профили кроют контур ровно, без свисания.
+        pts = np.array([[0, 0], [40, 0], [40, 20], [0, 20]],
+                       dtype=np.float64)
+        for kind in (bd.ROUND, bd.BELLCAST_GABLE, bd.BUTTERFLY,
+                     bd.CROSSPITCHED, bd.SAWTOOTH):
+            verts, rise, tri = bd.roof_surface(pts, kind, None, 5.0)
+            self.assertIsNotNone(verts, kind)
+            self.assertAlmostEqual(_plan_area(verts, tri), bd.area(pts),
+                                   places=6)
+            self.assertAlmostEqual(float(rise.min()), 0.0)
+            self.assertAlmostEqual(float(rise.max()), 1.0)
+
+    def test_butterfly_and_crosspitched(self):
+        groups = bd._roof_profile(bd.BUTTERFLY, 5.0, 20.0, 10.0)
+        # Ложбина посередине, карнизы по длинным сторонам.
+        self.assertAlmostEqual(bd._roof_at(groups, 0.0, 0.0), 0.0)
+        self.assertAlmostEqual(bd._roof_at(groups, 0.0, 10.0), 5.0)
+        self.assertAlmostEqual(bd._roof_at(groups, 0.0, -10.0), 5.0)
+        groups = bd._roof_profile(bd.CROSSPITCHED, 5.0, 20.0, 10.0)
+        # Два конька крестом: в центре конёк, в углах карниз.
+        self.assertAlmostEqual(bd._roof_at(groups, 0.0, 0.0), 5.0)
+        self.assertAlmostEqual(bd._roof_at(groups, 20.0, 10.0), 0.0)
+
+    def test_bellcast_two_slopes(self):
+        groups = bd._roof_profile(bd.BELLCAST_GABLE, 5.0, 20.0, 10.0)
+        self.assertAlmostEqual(bd._roof_at(groups, 0.0, 0.0), 5.0)
+        self.assertAlmostEqual(bd._roof_at(groups, 0.0, -10.0), 0.0)
+        # У карниза отлив пологий, к коньку скат крутой.
+        self.assertLess(bd._roof_at(groups, 0.0, -8.0), 1.0)
+        self.assertGreater(bd._roof_at(groups, 0.0, -3.0), 3.0)
+
+    def test_round_arc(self):
+        groups = bd._roof_profile(bd.ROUND, 5.0, 20.0, 10.0)
+        self.assertAlmostEqual(bd._roof_at(groups, 0.0, 0.0), 5.0)
+        self.assertAlmostEqual(bd._roof_at(groups, 0.0, 10.0), 0.0, places=6)
+
+    def test_sawtooth_teeth(self):
+        # Полуширина 20 единиц, зуб 8: пять зубов, высота у верха ~H.
+        groups = bd._roof_profile(bd.SAWTOOTH, 5.0, 20.0, 20.0, 1.0)
+        self.assertEqual(len(groups), 5)
+        # Середина зуба - половина высоты, у остекления почти полная.
+        self.assertAlmostEqual(bd._roof_at(groups, 0.0, 0.0), 2.5,
+                               delta=0.1)
+        self.assertGreater(bd._roof_at(groups, 0.0, -3.9), 4.5)
+
+    def test_rise_rounded_and_sawtooth(self):
+        pts = square(0, 0, 40)
+        # Купол: подъём по умолчанию - полуширина, не выше половины стены.
+        roof = bd.Roof(bd.DOME, None, None)
+        self.assertAlmostEqual(bd._roof_rise(roof, 100, 0, pts), 20.0)
+        self.assertAlmostEqual(bd._roof_rise(roof, 10, 0, pts), 5.0)
+        # Пила: по половине зуба, зубов пять на полуширине 20.
+        roof = bd.Roof(bd.SAWTOOTH, None, None)
+        want = math.tan(math.radians(bd.ROOF_PITCH)) * 20.0 / 5.0
+        self.assertAlmostEqual(bd._roof_rise(roof, 100, 0, pts), want)
+
+    def test_radial_shapes(self):
+        pts = np.array([[0, 0], [40, 0], [40, 20], [0, 20]],
+                       dtype=np.float64)
+        for kind in (bd.CONE, bd.DOME, bd.ONION):
+            verts, rise, tri = bd._radial_surface(pts, 5.0, kind)
+            self.assertIsNotNone(verts, kind)
+            self.assertGreater(len(tri), 0)
+            self.assertAlmostEqual(float(rise.min()), 0.0)
+            self.assertAlmostEqual(float(rise.max()), 1.0)
+        # Конус, купол и луковица доходят до карниза: покрытие равно
+        # контуру. У луковицы нижнее кольцо добавлено у самой стены.
+        for kind in (bd.CONE, bd.DOME, bd.ONION):
+            verts, rise, tri = bd._radial_surface(pts, 5.0, kind)
+            self.assertAlmostEqual(_plan_area(verts, tri), bd.area(pts),
+                                   places=6)
+
+    def test_radial_footprint(self):
+        data = _tile_roof([[square(100, 100, 40)]], height=10,
+                          roof_shape="dome")
+        fp = bd.footprints((14, 0, 0), data)
+        self.assertIsNotNone(fp.roof_tri)
+        self.assertGreater(float(fp.roof_h[0]), 0.0)
+        self.assertTrue(bd.mesh_ok(bd.mesh(fp)))
 
     def test_huge_footprint_stays_flat(self):
         # Огромный контур (у автора 139x88 м) скат рисует плитой:
@@ -445,6 +568,13 @@ def _timed(func, *args):
     start = time.perf_counter()
     func(*args)
     return time.perf_counter() - start
+
+
+def _plan_area(verts, tri):
+    """Площадь крыши в плане по её треугольникам."""
+    t = verts[tri.reshape(-1, 3)]
+    return float((bd._orient(t[:, 0, :2], t[:, 1, :2], t[:, 2, :2])
+                  * 0.5).sum())
 
 
 def _roof_area(key, data):

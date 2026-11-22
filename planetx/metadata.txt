@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.44.1
+version=1.45.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,8 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.44.1 A polygon crossing the 180th meridian is filled on its
+changelog=1.45.0 1.45.0 Roofs come with Overture roof_shape names from the maplibre-landmarks reference: round, bellcast_gable, butterfly, crosspitched, sawtooth, dome (name spherical), onion, cone. Contours are cut by crease lines; profiles are planes, rotation bodies are dome, onion and cone. Verified with frames in the globe: round, onion, skillion in Perm, dome in Perm, dome in Moscow, sawtooth in London; frames are in the OpenCode default-workspace project, roof numbers from Overture test runs.
+      1.44.1 A polygon crossing the 180th meridian is filled on its
       own place. Before, the fill of such a polygon could spread across
       the other side of the Earth. The catchment of a place across the
       meridian is computed around the place.

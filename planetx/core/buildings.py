@@ -69,7 +69,7 @@ DEFAULT_HEIGHT = 5.0
 # 2026 года, её утверждает автор.
 DEFAULT_COLOR = (226, 222, 214)
 # Формы крыш Overture Maps (roof_shape). 0 - плоская крыша, её несут
-# и прочие значения: round, dome, onion, sawtooth, butterfly, spherical.
+# и прочие значения: none, unknown, complex, many, mixed.
 FLAT = 0
 GABLED = 1
 HIPPED = 2
@@ -78,6 +78,21 @@ HALF_HIPPED = 4
 SALTBOX = 5
 GAMBREL = 6
 MANSARD = 7
+SKILLION = 8
+ROUND = 9
+BELLCAST_GABLE = 10
+BUTTERFLY = 11
+CROSSPITCHED = 12
+SAWTOOTH = 13
+DOME = 14
+ONION = 15
+CONE = 16
+# Крыши по плоскостям профиля: контур режется по линиям перегиба.
+PROFILE_SHAPES = (GABLED, HIPPED, HALF_HIPPED, PYRAMIDAL, SALTBOX,
+                  GAMBREL, MANSARD, SKILLION, ROUND, BELLCAST_GABLE,
+                  BUTTERFLY, CROSSPITCHED, SAWTOOTH)
+# Крыши по телу вращения вокруг центра контура: купол, луковица, конус.
+RADIAL_SHAPES = (DOME, ONION, CONE)
 ROOF_SHAPES = {
     # Плоская: сама flat и то, что по эталону крыши не даёт.
     "flat": FLAT, "none": FLAT, "unknown": FLAT, "complex": FLAT,
@@ -92,15 +107,29 @@ ROOF_SHAPES = {
     "hipped_and_gabled": HIPPED,
     "half_hipped": HALF_HIPPED, "side_half_hipped": HALF_HIPPED,
     "pyramidal": PYRAMIDAL, "pyramid": PYRAMIDAL,
-    # Кривые и пилообразные пока не рисуются: остаются плоскими.
-    "skillion": FLAT, "lean_to": FLAT, "monopitch": FLAT, "shed": FLAT,
-    "sawtooth": FLAT, "round": FLAT, "dome": FLAT, "onion": FLAT,
-    "spherical": FLAT, "cone": FLAT, "butterfly": FLAT,
-    "crosspitched": FLAT, "bellcast_gable": FLAT,
+    # Односкатные: плоскость от карниза до верха стены.
+    "skillion": SKILLION, "lean_to": SKILLION, "monopitch": SKILLION,
+    "shed": SKILLION,
+    # Кривые и пилообразные профили из эталона maplibre-landmarks.
+    "round": ROUND, "bellcast_gable": BELLCAST_GABLE,
+    "butterfly": BUTTERFLY, "crosspitched": CROSSPITCHED,
+    "sawtooth": SAWTOOTH,
+    # Тела вращения: купол (spherical - имя Overture), луковица, конус.
+    "dome": DOME, "spherical": DOME, "onion": ONION, "cone": CONE,
 }
 # Крутизна ската по умолчанию, градусы. По ней оценивается высота крыши,
 # когда в тайле нет roof_height. 30 - как в OSM Buildings и maplibre-landmarks.
 ROOF_PITCH = 30.0
+# Пила: желаемая ширина зуба, метры, и вынос почти отвесного остекления,
+# метры. Величины эталона maplibre-landmarks, profiles.ts.
+TOOTH_M = 8.0
+GLAZING_M = 0.02
+# Купол и луковица: колец по высоте и точек по кольцу, как в эталоне.
+DOME_STEPS = 12
+LATHE_POINTS = 48
+# Профиль луковицы OSMBuildings: доля радиуса и доля высоты на кольцо.
+ONION_PROFILE = ((0.8, 0.0), (0.9, 0.18), (0.9, 0.35), (0.8, 0.47),
+                 (0.6, 0.59), (0.5, 0.65), (0.2, 0.82), (0.0, 1.0))
 # Крыша ниже этого не рисуется, метры: от низкой крыши одна рябь.
 MIN_ROOF = 0.5
 # Контур больше этого - плоская крыша, м². У огромных домов в Overture
@@ -126,7 +155,7 @@ VERTEX = np.dtype([("position", "<f4", 3), ("normal", "i1", 4),
 Roof = namedtuple("Roof", "shape direction height")
 Roof.__doc__ = """Крыша здания Overture.
 
-shape - FLAT..PYRAMIDAL. direction - азимут конька в градусах или
+shape - FLAT..CONE. direction - азимут конька в градусах или
 None. height - высота ската в метрах или None, тогда оценивается по
 ROOF_PITCH.
 """
@@ -568,11 +597,13 @@ def _roof_frame(points, direction):
     return u * cu + v * cv, u, v, half_l, half_w
 
 
-def _roof_profile(shape, height, half_l, half_w):
+def _roof_profile(shape, height, half_l, half_w, scale=1.0):
     """Плоскости скатов: h = a*u + b*v + c; высота крыши - наименьшая.
 
     Профиль - как в maplibre-landmarks: крыша задана плоскостями, а
-    контур лишь режется по линиям, где плоскости пересекаются.
+    контур лишь режется по линиям, где плоскости пересекаются. Список
+    групп, высота крыши - наибольшая из низших плоскостей группы.
+    scale - метров в единице тайла, по нему пила считает ширину зуба.
     """
     if half_l <= 0.0 or half_w <= 0.0:
         return None
@@ -611,7 +642,71 @@ def _roof_profile(shape, height, half_l, half_w):
                     (-s * 0.6 * height / half_w, 0.0,
                      0.4 * height + 0.6 * height * half_l / half_w)]
         return [sides(1) + sides(-1) + ends(1) + ends(-1)]
+    if shape == SKILLION:
+        # Односкатная: одна плоскость от карниза (v = -W) до верха
+        # стены (v = +W). Низ - со стороны главного ската.
+        return [[(0.0, height / (2.0 * half_w), 0.5 * height)]]
+    if shape == ROUND:
+        # Полукруг поперёк конька восемью плоскостями, как в эталоне.
+        planes = []
+        for k in range(8):
+            v0 = -half_w + 2.0 * half_w * k / 8.0
+            v1 = -half_w + 2.0 * half_w * (k + 1) / 8.0
+            h0 = height * math.sqrt(max(0.0, 1.0 - (v0 / half_w) ** 2))
+            h1 = height * math.sqrt(max(0.0, 1.0 - (v1 / half_w) ** 2))
+            slope = (h1 - h0) / (v1 - v0)
+            planes.append((0.0, slope, h0 - slope * v0))
+        return [planes]
+    if shape == BELLCAST_GABLE:
+        def side(s):
+            # Крутой верх до 0.2 H на 70 % прогона, затем пологий отлив.
+            return [(0.0, -s * 0.8 * height / (0.7 * half_w), height),
+                    (0.0, -s * 0.2 * height / (0.3 * half_w),
+                     0.2 * height / 0.3)]
+        return [[p, q] for p in side(1) for q in side(-1)]
+    if shape == BUTTERFLY:
+        # Буква V: карнизы по длинным сторонам, ложбина посередине.
+        return [[(0.0, -height / half_w, 0.0)],
+                [(0.0, height / half_w, 0.0)]]
+    if shape == CROSSPITCHED:
+        # Два конька крестом: фронтоны со всех четырёх сторон.
+        return [gable,
+                [(-height / half_l, 0.0, height),
+                 (height / half_l, 0.0, height)]]
+    if shape == SAWTOOTH:
+        # Пила: у каждого зуба отвесное остекление и скат вниз.
+        teeth = max(1, int(round(2.0 * half_w * scale / TOOTH_M)))
+        width = 2.0 * half_w / teeth
+        glazing = min(GLAZING_M / scale, 0.1 * width)
+        groups = []
+        for k in range(teeth):
+            start = -half_w + k * width
+            top = start if k == 0 else start + glazing
+            run = start + width - top
+            slope = (0.0, -height / run,
+                     height * (start + width) / run)
+            if k == 0:
+                # Высокая сторона первого зуба - стена дома.
+                groups.append([slope])
+            else:
+                groups.append([slope,
+                               (0.0, height / glazing,
+                                -height * start / glazing)])
+        return groups
     return None
+
+
+def _roof_pairs(shape, groups):
+    """Плоскости, которым положено сходиться: у пилы только соседние."""
+    if shape != SAWTOOTH or len(groups) < 2:
+        return None
+    pairs = []
+    for k in range(1, len(groups)):
+        slope = groups[k][0]
+        glazing = groups[k][1]
+        pairs.append((slope, glazing))
+        pairs.append((groups[k - 1][0], glazing))
+    return pairs
 
 
 def _roof_at(groups, pu, pv):
@@ -624,32 +719,34 @@ def _roof_at(groups, pu, pv):
     return best
 
 
-def _roof_creases(groups, box):
+def _roof_creases(groups, box, pairs=None):
     """Линии перегиба: где две плоскости профиля равны."""
-    planes = [p for group in groups for p in group]
+    if pairs is None:
+        planes = [p for group in groups for p in group]
+        pairs = [(planes[i], planes[j]) for i in range(len(planes))
+                 for j in range(i + 1, len(planes))]
     out = []
     seen = set()
-    for i in range(len(planes)):
-        for j in range(i + 1, len(planes)):
-            a = planes[i][0] - planes[j][0]
-            b = planes[i][1] - planes[j][1]
-            c = planes[i][2] - planes[j][2]
-            norm = math.hypot(a, b)
-            if norm < 1e-9:
-                continue
-            a, b, c = a / norm, b / norm, c / norm
-            if a < -1e-9 or (abs(a) <= 1e-9 and b < 0.0):
-                a, b, c = -a, -b, -c
-            key = (round(a, 6), round(b, 6), round(c, 6))
-            if key in seen:
-                continue
-            seen.add(key)
-            corners = [(box[0], box[1]), (box[2], box[1]),
-                       (box[2], box[3]), (box[0], box[3])]
-            side = [a * u + b * v + c for u, v in corners]
-            if all(x > 1e-9 for x in side) or all(x < -1e-9 for x in side):
-                continue
-            out.append((a, b, c))
+    for first, second in pairs:
+        a = first[0] - second[0]
+        b = first[1] - second[1]
+        c = first[2] - second[2]
+        norm = math.hypot(a, b)
+        if norm < 1e-9:
+            continue
+        a, b, c = a / norm, b / norm, c / norm
+        if a < -1e-9 or (abs(a) <= 1e-9 and b < 0.0):
+            a, b, c = -a, -b, -c
+        key = (round(a, 6), round(b, 6), round(c, 6))
+        if key in seen:
+            continue
+        seen.add(key)
+        corners = [(box[0], box[1]), (box[2], box[1]),
+                   (box[2], box[3]), (box[0], box[3])]
+        side = [a * u + b * v + c for u, v in corners]
+        if all(x > 1e-9 for x in side) or all(x < -1e-9 for x in side):
+            continue
+        out.append((a, b, c))
     return out
 
 
@@ -677,7 +774,9 @@ def _roof_rise(roof, height, base, points, scale=1.0):
 
     Явная roof_height берётся как есть, не выше высоты здания. Иначе
     ROOF_PITCH по полуширине поперёк конька, не выше половины высоты
-    здания. Ниже MIN_ROOF скат не рисуется: от него одна рябь.
+    здания. У купола, луковицы и круглой крыши подъём по умолчанию
+    равен полуширине - полусфера, как в эталоне. У пилы - по половине
+    зуба. Ниже MIN_ROOF скат не рисуется: от него одна рябь.
     """
     wall = height - base
     if roof.shape == FLAT or wall <= 0.0:
@@ -687,23 +786,29 @@ def _roof_rise(roof, height, base, points, scale=1.0):
     frame = _roof_frame(points, _face(roof))
     if frame is None:
         return 0.0
-    half = min(frame[3], frame[4])
-    rise = math.tan(math.radians(ROOF_PITCH)) * half * scale
+    half_l, half_w = frame[3], frame[4]
+    if roof.shape in (ROUND, DOME, ONION):
+        rise = min(half_l, half_w) * scale
+    elif roof.shape == SAWTOOTH:
+        teeth = max(1, int(round(2.0 * half_w * scale / TOOTH_M)))
+        rise = math.tan(math.radians(ROOF_PITCH)) * half_w * scale / teeth
+    else:
+        rise = math.tan(math.radians(ROOF_PITCH)) * min(half_l, half_w) * scale
     rise = min(rise, 0.5 * wall)
     return rise if rise >= MIN_ROOF else 0.0
 
 
-def roof_surface(points, kind, direction, rise=0.0):
+def roof_surface(points, kind, direction, rise=0.0, scale=1.0):
     """Скатная крыша по контуру: профиль, контур режется по перегибам.
 
-    points - контур (n, 2) в осях тайла. kind - GABLED, HIPPED,
-    HALF_HIPPED или PYRAMIDAL. direction - куда смотрит главный скат
-    или None. rise - высота крыши в единицах тайла. Подъём вершины
-    0 - карниз, 1 - конёк. Крыша покрывает сам контур и за стены не
-    свисает. None - крыша остаётся плоской.
+    points - контур (n, 2) в осях тайла. kind - любая форма из
+    PROFILE_SHAPES. direction - куда смотрит главный скат или None.
+    rise - высота крыши в единицах тайла. scale - метров в единице
+    тайла, по нему пила считает ширину зуба. Подъём вершины 0 - карниз,
+    1 - конёк. Крыша покрывает сам контур и за стены не свисает. None -
+    крыша остаётся плоской.
     """
-    if kind not in (GABLED, HIPPED, HALF_HIPPED, PYRAMIDAL,
-                    SALTBOX, GAMBREL, MANSARD) or rise <= 0.0:
+    if kind not in PROFILE_SHAPES or rise <= 0.0:
         return None
     frame = _roof_frame(points, direction)
     if frame is None:
@@ -711,7 +816,7 @@ def roof_surface(points, kind, direction, rise=0.0):
     centre, u, v, half_l, half_w = frame
     if half_l <= 0.25 or half_w <= 0.25:
         return None
-    groups = _roof_profile(kind, float(rise), half_l, half_w)
+    groups = _roof_profile(kind, float(rise), half_l, half_w, scale)
     if groups is None:
         return None
     rel = points - centre
@@ -719,7 +824,7 @@ def roof_surface(points, kind, direction, rise=0.0):
     pv = rel @ v
     box = (float(pu.min()), float(pv.min()),
            float(pu.max()), float(pv.max()))
-    lines = _roof_creases(groups, box)
+    lines = _roof_creases(groups, box, _roof_pairs(kind, groups))
     # Контур -> выпуклые треугольники -> разрезать по линиям перегиба.
     pieces = []
     for t in ear_clip(points):
@@ -780,6 +885,95 @@ def roof_surface(points, kind, direction, rise=0.0):
         return None
     return (np.vstack(verts), np.asarray(fractions, dtype=np.float64),
             np.asarray(tris, dtype=np.uint32))
+
+
+def _subdivide_ring(points, count):
+    """Кольцо с длинными рёбрами, разбитыми примерно на count точек."""
+    n = len(points)
+    lengths = [float(np.linalg.norm(points[(i + 1) % n] - points[i]))
+               for i in range(n)]
+    perimeter = float(sum(lengths))
+    if not perimeter > 0.0:
+        return points
+    out = []
+    for i in range(n):
+        p = points[i]
+        q = points[(i + 1) % n]
+        k = max(1, int(round(lengths[i] / perimeter * count)))
+        for j in range(k):
+            out.append(p + (q - p) * (j / k))
+    return np.asarray(out, dtype=np.float64)
+
+
+def _lathe_rings(outer, centre, radius, profile, rise):
+    """Кольца тела вращения: вершины, подъём 0-1 и треугольники."""
+    top = max(h for _, h in profile)
+    dx = outer[:, 0] - centre[0]
+    dz = outer[:, 1] - centre[1]
+    distance = np.hypot(dx, dz)
+    distance[distance == 0.0] = 1.0
+    rings = []
+    for share, h in profile:
+        # Нижнее кольцо - сам контур, выше кольца тянутся к кругу радиуса R.
+        roundness = min(1.0, 1.5 * h / top) if top > 0.0 else 1.0
+        s = share * (1.0 - roundness + roundness * radius / distance)
+        rings.append(np.stack([centre[0] + dx * s,
+                               centre[1] + dz * s], axis=1))
+    verts = np.vstack(rings)
+    fractions = np.concatenate([np.full(len(outer), h / rise)
+                                for _, h in profile])
+    tris = []
+    m = len(outer)
+    for i in range(len(profile) - 1):
+        low = i * m
+        high = (i + 1) * m
+        for k in range(m):
+            k1 = (k + 1) % m
+            tris.append([low + k, low + k1, high + k1])
+            tris.append([low + k, high + k1, high + k])
+    return verts, fractions, np.asarray(tris, dtype=np.uint32).reshape(-1)
+
+
+def _radial_surface(points, rise, kind):
+    """Купол, луковица или конус по контуру: вершины, подъём, треугольники.
+
+    Купол и луковица - тело вращения: нижнее кольцо повторяет контур,
+    верхние тянутся к кругу радиуса R = min(полуразмеров) и сходятся
+    в вершине. Конус - треугольники от каждого ребра контура к вершине
+    над центром: так покрывается и некруглый контур, без плоского
+    остатка. None - контур или высота не годятся.
+    """
+    n = len(points)
+    if n < 3 or rise <= 0.0:
+        return None
+    frame = _roof_frame(points, None)
+    if frame is None:
+        return None
+    centre, _, _, half_l, half_w = frame
+    if half_l <= 0.25 or half_w <= 0.25:
+        return None
+    radius = min(half_l, half_w)
+    outer = _subdivide_ring(points, LATHE_POINTS)
+    if kind == CONE:
+        m = len(outer)
+        verts = np.vstack([outer, centre[None, :]])
+        fractions = np.concatenate([np.zeros(m), np.ones(1)])
+        tris = np.array([[k, (k + 1) % m, m] for k in range(m)],
+                        dtype=np.uint32).reshape(-1)
+        return verts, fractions, tris
+    if kind == DOME:
+        # Полукруг по высоте: доля радиуса и подъём на кольцо.
+        profile = [(math.cos(i / DOME_STEPS * 0.5 * math.pi),
+                    rise * math.sin(i / DOME_STEPS * 0.5 * math.pi))
+                   for i in range(DOME_STEPS + 1)]
+    elif kind == ONION:
+        # Кольцо у стены: профиль OSMBuildings начинается с 0.8 радиуса,
+        # без него между стеной и луковицей остаётся щель до неба.
+        profile = [(1.0, 0.0)] + [(share, share_h * rise)
+                                  for share, share_h in ONION_PROFILE]
+    else:
+        return None
+    return _lathe_rings(outer, centre, radius, profile, rise)
 
 
 def _skeleton_surface(points, rise):
@@ -932,8 +1126,7 @@ def footprints(key, data):
     surfaces = []  # (номер здания, (вершины тайла, подъём, треугольники))
     for b in range(len(kept)):
         shape = kept[b].roof.shape
-        if shape not in (GABLED, HIPPED, PYRAMIDAL,
-                         SALTBOX, GAMBREL, MANSARD) or not single[b]:
+        if shape not in PROFILE_SHAPES + RADIAL_SHAPES or not single[b]:
             continue
         first = int(ring_of_building[b])
         ring = xy[starts[first]:starts[first] + sizes[first]]
@@ -949,8 +1142,11 @@ def footprints(key, data):
             # Сложный контур - вальмовая крыша по прямому скелету,
             # прямоугольник остаётся на плоскостях.
             surface = _skeleton_surface(ring, rise / scale)
+        if surface is None and shape in RADIAL_SHAPES:
+            surface = _radial_surface(ring, rise / scale, shape)
         if surface is None:
-            surface = roof_surface(ring, shape, direction, rise / scale)
+            surface = roof_surface(ring, shape, direction, rise / scale,
+                                   scale)
         if surface is None:
             continue
         roof_h[b] = rise
