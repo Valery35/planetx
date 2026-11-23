@@ -246,7 +246,9 @@ class _LAV:
         return lav
 
     def invalidate(self, vertex):
-        assert vertex.lav is self, "Tried to invalidate a vertex that's not mine"
+        if vertex.lav is not self:
+            raise AssertionError(
+                "Tried to invalidate a vertex that's not mine")
         vertex._valid = False
         if self.head == vertex:
             self.head = self.head.next
