@@ -137,6 +137,10 @@ MIN_ROOF = 0.5
 # 140x90 м читается плоской плитой. Просьба автора от 19 ноября 2026
 # года: 5422 м² saltbox в его районе, 58.020797, 56.276039.
 MAX_ROOF_AREA = 2000.0
+# Пробы рельефа внутри контура: у контура длиннее этой, метры, берутся
+# ещё и четверти рамки. Середина контура бывает выше краёв, и её
+# отметка должна поднять дом (просьба автора 23 ноября 2026 года).
+INNER_STEP_M = 30.0
 # Цвет скатов по умолчанию, RGB: как в OSM Buildings. Фронтоны (торцы,
 # вальмовые свесы) остаются цветом стены.
 ROOF_COLOR = (185, 169, 154)
@@ -172,8 +176,9 @@ rings - кольца в единицах тайла, массивы (n, 2) бе�
 Footprint = namedtuple(
     "Footprint",
     "key latlon next wall owner height base color roof "
-    "roof_h roof_xy roof_rise roof_tri roof_owner",
-    defaults=(None, None, None, None, None))
+    "roof_h roof_xy roof_rise roof_tri roof_owner "
+    "inner_latlon inner_owner",
+    defaults=(None, None, None, None, None, None, None))
 Footprint.__doc__ = """Здания тайла без высот рельефа.
 
 latlon - все точки колец (N, 2) в градусах. next - номер следующей
@@ -183,7 +188,9 @@ owner - номер здания точки. height, base - по зданиям, 
 точек uint32. roof_h - высота ската по зданиям, метры (0 - плоская).
 roof_xy - точки скатных крыш (R, 2) в градусах, roof_rise - их подъём
 0-1, roof_tri - треугольники (номера точек R), roof_owner - здание
-точки. Поля скатных крыш есть только когда они есть в тайле.
+точки. inner_latlon - пробы рельефа внутри контуров (I, 2) в градусах,
+inner_owner - здание пробы: середина контура бывает выше краёв.
+Поля скатных крыш есть только когда они есть в тайле.
 """
 
 Mesh = namedtuple("Mesh", "key center vertices indices")
@@ -1121,6 +1128,66 @@ def footprints(key, data):
     lat0 = math.radians(0.5 * (float(south) + float(north)))
     scale = 2.0 * math.pi * ellipsoid.A * math.cos(lat0) \
         / (1 << key[0]) / extent
+    # Пробы рельефа внутри контура: отметка дома - наивысшая точка
+    # рельефа под ним, а середина контура бывает выше краёв. Среднее
+    # вершин выпуклого контура всегда внутри, вогнутые и большие
+    # контуры проверяются лучом, одним пакетом на все здания.
+    lo = np.minimum.reduceat(xy, starts, axis=0)
+    hi = np.maximum.reduceat(xy, starts, axis=0)
+    mean = np.add.reduceat(xy, starts, axis=0) \
+        / np.asarray(sizes)[:, None]
+    span = hi - lo
+    big = span.max(axis=1) * scale > INNER_STEP_M
+    plain = ~concave[ring_of_building] & ~big[ring_of_building]
+    inner_pts = [mean[ring_of_building[plain]]]
+    inner_own = [np.nonzero(plain)[0]]
+    test = np.nonzero(~plain)[0]
+    if len(test):
+        firsts = ring_of_building[test]
+        esizes = np.asarray(sizes)[firsts]
+        pts_per = np.where(big[firsts], 5, 1)
+        pts = []
+        for f in firsts:
+            pts.append(mean[f])
+            if big[f]:
+                pts.extend([lo[f] + span[f] * (du, dv)
+                            for du, dv in ((0.25, 0.25), (0.75, 0.25),
+                                           (0.25, 0.75), (0.75, 0.75))])
+        pts = np.asarray(pts)
+        # Рёбра пробуемых колец и пары ребро x точка своего здания.
+        shift = np.repeat(np.cumsum(esizes) - esizes, esizes)
+        point_idx = np.repeat(starts[firsts], esizes) \
+            + np.arange(int(esizes.sum())) - shift
+        pair_e = []
+        pair_p = []
+        epos = pos = 0
+        for k in range(len(test)):
+            n, m = int(esizes[k]), int(pts_per[k])
+            pair_e.append(np.repeat(np.arange(epos, epos + n), m))
+            pair_p.append(np.tile(np.arange(pos, pos + m), n))
+            epos += n
+            pos += m
+        pair_e = np.concatenate(pair_e)
+        pair_p = np.concatenate(pair_p)
+        x, y = pts[pair_p, 0], pts[pair_p, 1]
+        x1, y1 = xy[point_idx[pair_e], 0], xy[point_idx[pair_e], 1]
+        x2, y2 = xy[nxt[point_idx[pair_e]], 0], xy[nxt[point_idx[pair_e]], 1]
+        flat = y1 == y2
+        crossing = ~flat & (y >= np.minimum(y1, y2)) \
+            & (y < np.maximum(y1, y2))
+        x_at = x1 + (y - y1) * (x2 - x1) / np.where(flat, 1.0, y2 - y1)
+        hit = crossing & (x < x_at)
+        n_per_point = np.repeat(esizes, pts_per)
+        parity = np.bitwise_xor.reduceat(
+            hit, np.cumsum(n_per_point) - n_per_point)
+        if parity.any():
+            inner_pts.append(pts[parity])
+            inner_own.append(np.repeat(test, pts_per)[parity])
+    inner_latlon = None
+    inner_owner = None
+    if sum(len(p) for p in inner_pts):
+        inner_latlon = tile_latlon(key, extent, np.vstack(inner_pts))
+        inner_owner = np.concatenate(inner_own)
     # Скатные крыши - у выпуклых контуров без дворов и с высотой ската.
     roof_h = np.zeros(len(kept))
     surfaces = []  # (номер здания, (вершины тайла, подъём, треугольники))
@@ -1188,7 +1255,8 @@ def footprints(key, data):
         roof_owner = np.concatenate(roof_owner)
     return Footprint(key, tile_latlon(key, extent, xy), nxt, ~border, owner,
                      heights, bases, color, flat_roof, roof_h, roof_xy,
-                     roof_rise, roof_tri, roof_owner)
+                     roof_rise, roof_tri, roof_owner, inner_latlon,
+                     inner_owner)
 
 
 def _normals(vectors):
@@ -1205,22 +1273,35 @@ def mesh(footprint, heights_at=None):
 
     heights_at - высоты массива точек (широты, долготы), None - земля
     на эллипсоиде. Отметка дома - наивысшая точка рельефа под его
-    точками: от низкой на склоне дом уходил под землю. Стена
-    поднимается до карниза (height - roof_h), скатная крыша лежит от
-    карниза до конька.
+    точками и пробами середины: от низкой на склоне дом уходил под
+    землю, а бугор внутри контура не выпирал сквозь стены. Низ стены
+    опускается до самой низкой земли под контуром: на склоне стена
+    доходит до поверхности, а не висит в воздухе. Стена поднимается
+    до карниза (height - roof_h), скатная крыша лежит от карниза
+    до конька.
     """
     fp = footprint
     lat, lon = fp.latlon[:, 0], fp.latlon[:, 1]
     ground = np.zeros(len(lat)) if heights_at is None \
         else np.asarray(heights_at(lat, lon), dtype=np.float64)
+    sample_owner = fp.owner
+    if heights_at is not None and fp.inner_latlon is not None \
+            and len(fp.inner_latlon):
+        inner = np.asarray(
+            heights_at(fp.inner_latlon[:, 0], fp.inner_latlon[:, 1]),
+            dtype=np.float64)
+        ground = np.concatenate([ground, inner])
+        sample_owner = np.concatenate([sample_owner, fp.inner_owner])
     high = np.full(len(fp.height), -np.inf)
-    np.maximum.at(high, fp.owner, ground)
+    np.maximum.at(high, sample_owner, ground)
+    low = np.full(len(fp.height), np.inf)
+    np.minimum.at(low, fp.owner, ground[:len(fp.owner)])
     roof_h = np.zeros(len(fp.height)) if fp.roof_h is None else fp.roof_h
     eave = (high + fp.height - roof_h)[fp.owner]
     top = (high + fp.height)[fp.owner]
     top_ecef = geodetic_to_ecef(lat, lon, top)
     eave_ecef = geodetic_to_ecef(lat, lon, eave)
-    bottom = geodetic_to_ecef(lat, lon, (high + fp.base)[fp.owner])
+    bottom = geodetic_to_ecef(lat, lon, (low + fp.base)[fp.owner])
     up = surface_normal(lat, lon)
     i = np.nonzero(fp.wall)[0]
     j = fp.next[i]

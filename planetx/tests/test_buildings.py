@@ -240,6 +240,62 @@ class TestMesh(unittest.TestCase):
         self.assertAlmostEqual(float(h.max()), highest + fp.height[0],
                                places=2)
 
+    def test_bottom_reaches_surface(self):
+        # Низ стены - до самой низкой земли под контуром: на склоне
+        # стена висела бы в воздухе (просьба автора 23.11.2026).
+        fp = bd.footprints((14, 0, 0), _tile([[square(100, 100, 50)]]))
+
+        def slope(lats, lons):
+            return 100.0 + lats * 1000.0
+
+        m = bd.mesh(fp, slope)
+        xyz = m.center + m.vertices["position"].astype(np.float64)
+        lat, lon, h = ecef_to_geodetic(xyz)
+        walls = 4 * int(np.count_nonzero(fp.wall))
+        quad = h[:walls].reshape(-1, 4)
+        bottom = quad[:, :2].ravel()
+        ring = fp.latlon[fp.owner == 0]
+        lowest = float(slope(ring[:, 0], ring[:, 1]).min())
+        self.assertAlmostEqual(float(bottom.max()), lowest, places=2)
+        self.assertAlmostEqual(float(bottom.min()), lowest, places=2)
+
+    def test_inner_bump_lifts(self):
+        # Середина контура бывает выше краёв: проба середины поднимает
+        # отметку дома, бугор не выпирает сквозь стены (23.11.2026).
+        fp = bd.footprints((14, 0, 0), _tile([[square(100, 100, 50)]]))
+        self.assertIsNotNone(fp.inner_latlon)
+        bump = fp.inner_latlon[0]
+
+        def terrain(lats, lons):
+            out = np.full(len(lats), 100.0)
+            hit = (np.abs(lats - bump[0]) < 1e-12) \
+                & (np.abs(lons - bump[1]) < 1e-12)
+            out[hit] = 130.0
+            return out
+
+        m = bd.mesh(fp, terrain)
+        xyz = m.center + m.vertices["position"].astype(np.float64)
+        lat, lon, h = ecef_to_geodetic(xyz)
+        top = h[len(h) - len(fp.latlon):]
+        self.assertAlmostEqual(float(top.max()), 130.0 + fp.height[0],
+                               places=2)
+        # Низ остаётся у низкой земли краёв, а не у бугра.
+        walls = 4 * int(np.count_nonzero(fp.wall))
+        quad = h[:walls].reshape(-1, 4)
+        self.assertAlmostEqual(float(quad[:, :2].max()), 100.0, places=2)
+
+    def test_concave_inner_inside(self):
+        # У вогнутого контура проба середины берётся только внутри:
+        # среднее вершин Г-образного дома лежит снаружи.
+        lshape = [[(100, 100), (150, 100), (150, 120), (130, 120),
+                  (130, 150), (100, 150)]]
+        fp = bd.footprints((14, 0, 0), _tile([lshape]))
+        ring = fp.latlon[fp.owner == 0]
+        lo = fp.inner_latlon[:, 0] >= ring[:, 0].min() - 1e-12
+        hi = fp.inner_latlon[:, 0] <= ring[:, 0].max() + 1e-12
+        self.assertTrue(bool((lo & hi).all()))
+        self.assertLessEqual(len(fp.inner_latlon), 1)
+
     def test_mesh_ok(self):
         m = bd.mesh(self.fp)
         self.assertTrue(bd.mesh_ok(m))
