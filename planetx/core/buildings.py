@@ -1019,6 +1019,17 @@ def _skeleton_surface(points, rise):
     for face in faces:
         if len(face) < 3 or len(face) != len(set(face)):
             return None
+    # Скелет должен оставаться внутри контура здания. Если bpypolyskel
+    # выдал шип за пределы контура, отбрасываем и падаем на плоскости.
+    min_xy = points.min(axis=0)
+    max_xy = points.max(axis=0)
+    size = np.maximum(max_xy - min_xy, 1.0)
+    lower = min_xy - size
+    upper = max_xy + size
+    for v in verts:
+        if v.x < lower[0] or v.x > upper[0] \
+                or v.y < lower[1] or v.y > upper[1]:
+            return None
     total = len(verts)
     coords = np.empty((total, 2), dtype=np.float64)
     fractions = np.empty(total, dtype=np.float64)

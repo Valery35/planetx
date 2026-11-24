@@ -366,7 +366,9 @@ class TestRoofShapes(unittest.TestCase):
                          bd.HALF_HIPPED)
         self.assertEqual(bd.roof_attrs({"roof_shape": "round"}).shape,
                          bd.ROUND)
-        self.assertEqual(bd.roof_attrs({}).shape, bd.FLAT)
+        # Без roof_shape - двускатная: OpenFreeMap не даёт атрибута.
+        self.assertEqual(bd.roof_attrs({}).shape, bd.GABLED)
+        self.assertEqual(bd.roof_attrs({"roof_shape": "flat"}).shape, bd.FLAT)
         # Односкатные: skillion и его имена в Overture.
         for name in ("skillion", "lean_to", "lean-to", "monopitch", "shed"):
             self.assertEqual(bd.roof_attrs({"roof_shape": name}).shape,
