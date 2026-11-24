@@ -96,7 +96,7 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.45.0 1.45.0 Roofs come with Overture roof_shape names from the maplibre-landmarks reference: round, bellcast_gable, butterfly, crosspitched, sawtooth, dome (name spherical), onion, cone. Contours are cut by crease lines; profiles are planes, rotation bodies are dome, onion and cone. Verified with frames in the globe: round, onion, skillion in Perm, dome in Perm, dome in Moscow, sawtooth in London; frames are in the OpenCode default-workspace project, roof numbers from Overture test runs.
+changelog=1.45.2 1.45.2 Fixed spikes on hipped roofs of complex outlines. The straight skeleton bpypolyskel sometimes produced vertices far outside the building for concave contours; such a skeleton is now rejected and the roof is built with planes. 1.45.0 Roofs come with Overture roof_shape names from the maplibre-landmarks reference: round, bellcast_gable, butterfly, crosspitched, sawtooth, dome (name spherical), onion, cone. Contours are cut by crease lines; profiles are planes, rotation bodies are dome, onion and cone.
       1.44.1 A polygon crossing the 180th meridian is filled on its
       own place. Before, the fill of such a polygon could spread across
       the other side of the Earth. The catchment of a place across the
