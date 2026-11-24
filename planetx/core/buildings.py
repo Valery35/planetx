@@ -349,12 +349,12 @@ def roof_attrs(attrs):
 
     Название формы по эталону (OSM2World/maplibre-landmarks) сверяется
     без учёта регистра, а "_" и "-" равнозначны: half-hipped и
-    half_hipped - одно и то же. Незнакомые значения - плоская крыша,
+    half_hipped - одно и то же. Без roof_shape - двускатная: у домов OpenFreeMap атрибута нет. Незнакомые значения - плоская крыша,
     как и flat, many, mixed, gabled_row.
     """
     name = (attrs.get("roof_shape") or "").strip().lower()
     name = name.replace("-", "_").replace(" ", "_")
-    shape = ROOF_SHAPES.get(name, FLAT)
+    shape = ROOF_SHAPES.get(name, GABLED if not name else FLAT)
     direction = attrs.get("roof_direction")
     if direction in (None, ""):
         direction = None
