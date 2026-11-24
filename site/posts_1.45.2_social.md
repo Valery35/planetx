@@ -17,3 +17,14 @@ https://github.com/Valery35/planetx/releases/tag/v1.45.2
 ## X
 
 PlanetX 1.45.2 for QGIS. Fixed rare spikes on pitched roofs of complex buildings. The straight skeleton now falls back to planes when it drifts outside the outline. https://github.com/Valery35/planetx/releases/tag/v1.45.2 #QGIS #GIS
+
+## Reddit (r/QGIS, r/gis)
+
+**Title:** PlanetX 1.45.2 for QGIS - fixed rare spikes on pitched roofs of complex buildings
+
+**Body:**
+PlanetX 1.45.2 for QGIS is out. We fixed rare spikes on pitched roofs of complex buildings. The straight skeleton sometimes produced vertices far outside a concave polygon outline, stretching one triangle for kilometers. Now such a skeleton is rejected and the roof is built with planes. Found in Perm, Russia.
+
+Release: https://github.com/Valery35/planetx/releases/tag/v1.45.2
+
+PlanetX is a free open source (GPL 3) plugin for QGIS 3.36+ that opens a 3D globe in its own window.
